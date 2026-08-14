@@ -1,0 +1,1542 @@
+{
+ "dwellers": [
+  {
+   "name": "BARBASTELLE_BAT",
+   "cost": 1,
+   "types": [
+    "BAT"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "LEFT",
+     "treeSymbol": "HORSE_CHESTNUT",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "LEFT",
+     "treeSymbol": "SILVER_FIR",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "OAK",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "BECHSTEINS_BAT",
+   "cost": 1,
+   "types": [
+    "BAT"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "LEFT",
+     "treeSymbol": "BEECH",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "LEFT",
+     "treeSymbol": "OAK",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "BIRCH",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "BEECH_MARTEN",
+   "cost": 1,
+   "types": [
+    "PAWED_ANIMAL"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "LEFT",
+     "treeSymbol": "BEECH",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "LEFT",
+     "treeSymbol": "SYCAMORE",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "HORSE_CHESTNUT",
+     "count": 2,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "OAK",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "BLACKBERRIES",
+   "cost": 0,
+   "types": [
+    "PLANT"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "BEECH",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "BIRCH",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "SILVER_FIR",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "BROWN_BEAR",
+   "cost": 3,
+   "types": [
+    "PAWED_ANIMAL"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "LEFT",
+     "treeSymbol": "LINDEN",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "BEECH",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "HORSE_CHESTNUT",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "BROWN_LONG_EARED_BAT",
+   "cost": 1,
+   "types": [
+    "BAT"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "LEFT",
+     "treeSymbol": "SYCAMORE",
+     "count": 2,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "BEECH",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "BULLFINCH",
+   "cost": 1,
+   "types": [
+    "BIRD"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "TOP",
+     "treeSymbol": "DOUGLAS_FIR",
+     "count": 3,
+     "extraTypes": null
+    },
+    {
+     "position": "TOP",
+     "treeSymbol": "SILVER_FIR",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "CAMBERWELL_BEAUTY",
+   "cost": 0,
+   "types": [
+    "BUTTERFLY",
+    "INSECT"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "TOP",
+     "treeSymbol": "BIRCH",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "TOP",
+     "treeSymbol": "HORSE_CHESTNUT",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "TOP",
+     "treeSymbol": "SYCAMORE",
+     "count": 2,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "CHAFFINCH",
+   "cost": 1,
+   "types": [
+    "BIRD"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "TOP",
+     "treeSymbol": "BEECH",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "TOP",
+     "treeSymbol": "BIRCH",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "TOP",
+     "treeSymbol": "SYCAMORE",
+     "count": 2,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "CHANTERELLE",
+   "cost": 2,
+   "types": [
+    "MUSHROOM"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "BIRCH",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "SILVER_FIR",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "COMMON_TOAD",
+   "cost": 0,
+   "types": [
+    "AMPHIBIAN"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "BEECH",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "DOUGLAS_FIR",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "HORSE_CHESTNUT",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "OAK",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "SILVER_FIR",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "SYCAMORE",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "EURASIAN_JAY",
+   "cost": 1,
+   "types": [
+    "BIRD"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "TOP",
+     "treeSymbol": "BIRCH",
+     "count": 2,
+     "extraTypes": null
+    },
+    {
+     "position": "TOP",
+     "treeSymbol": "HORSE_CHESTNUT",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "TOP",
+     "treeSymbol": "SYCAMORE",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "EUROPEAN_BADGER",
+   "cost": 1,
+   "types": [
+    "PAWED_ANIMAL"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "LEFT",
+     "treeSymbol": "HORSE_CHESTNUT",
+     "count": 2,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "DOUGLAS_FIR",
+     "count": 2,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "EUROPEAN_FAT_DORMOUSE",
+   "cost": 1,
+   "types": [
+    "PAWED_ANIMAL"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "LEFT",
+     "treeSymbol": "BEECH",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "LEFT",
+     "treeSymbol": "SILVER_FIR",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "DOUGLAS_FIR",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "OAK",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "EUROPEAN_HARE",
+   "cost": 0,
+   "types": [
+    "PAWED_ANIMAL"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "LEFT",
+     "treeSymbol": "BEECH",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "LEFT",
+     "treeSymbol": "BIRCH",
+     "count": 2,
+     "extraTypes": null
+    },
+    {
+     "position": "LEFT",
+     "treeSymbol": "LINDEN",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "LEFT",
+     "treeSymbol": "SILVER_FIR",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "LEFT",
+     "treeSymbol": "OAK",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "BIRCH",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "SILVER_FIR",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "LINDEN",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "SYCAMORE",
+     "count": 2,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "FALLOW_DEER",
+   "cost": 2,
+   "types": [
+    "CLOVENHOOFED_ANIMAL",
+    "DEER"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "LEFT",
+     "treeSymbol": "LINDEN",
+     "count": 2,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "BIRCH",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "SYCAMORE",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "FIRE_SALAMANDER",
+   "cost": 1,
+   "types": [
+    "AMPHIBIAN"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "HORSE_CHESTNUT",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "LINDEN",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "DOUGLAS_FIR",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "FIREFLIES",
+   "cost": 0,
+   "types": [
+    "INSECT"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "BEECH",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "DOUGLAS_FIR",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "LINDEN",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "SYCAMORE",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "FLY_AGARIC",
+   "cost": 2,
+   "types": [
+    "MUSHROOM"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "SILVER_FIR",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "OAK",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "GNAT",
+   "cost": 0,
+   "types": [
+    "INSECT"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "LEFT",
+     "treeSymbol": "BIRCH",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "HORSE_CHESTNUT",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "OAK",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "GOSHAWK",
+   "cost": 2,
+   "types": [
+    "BIRD"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "TOP",
+     "treeSymbol": "DOUGLAS_FIR",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "TOP",
+     "treeSymbol": "SILVER_FIR",
+     "count": 2,
+     "extraTypes": null
+    },
+    {
+     "position": "TOP",
+     "treeSymbol": "OAK",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "GREAT_SPOTTED_WOODPECKER",
+   "cost": 1,
+   "types": [
+    "BIRD"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "TOP",
+     "treeSymbol": "DOUGLAS_FIR",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "TOP",
+     "treeSymbol": "LINDEN",
+     "count": 3,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "GREATER_HORSESHOE_BAT",
+   "cost": 1,
+   "types": [
+    "BAT"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "LEFT",
+     "treeSymbol": "BEECH",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "LINDEN",
+     "count": 2,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "HEDGEHOG",
+   "cost": 1,
+   "types": [
+    "PAWED_ANIMAL"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "BEECH",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "HORSE_CHESTNUT",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "OAK",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "LARGE_TORTOISESHELL",
+   "cost": 0,
+   "types": [
+    "BUTTERFLY",
+    "INSECT"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "TOP",
+     "treeSymbol": "BEECH",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "TOP",
+     "treeSymbol": "SILVER_FIR",
+     "count": 2,
+     "extraTypes": null
+    },
+    {
+     "position": "TOP",
+     "treeSymbol": "SYCAMORE",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "LYNX",
+   "cost": 1,
+   "types": [
+    "PAWED_ANIMAL"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "LEFT",
+     "treeSymbol": "DOUGLAS_FIR",
+     "count": 2,
+     "extraTypes": null
+    },
+    {
+     "position": "LEFT",
+     "treeSymbol": "HORSE_CHESTNUT",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "BEECH",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "LINDEN",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "SILVER_FIR",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "MOLE",
+   "cost": 2,
+   "types": [
+    "PAWED_ANIMAL"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "OAK",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "SYCAMORE",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "MOSS",
+   "cost": 0,
+   "types": [
+    "PLANT"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "DOUGLAS_FIR",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "LINDEN",
+     "count": 2,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "PARASOL_MUSHROOM",
+   "cost": 2,
+   "types": [
+    "MUSHROOM"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "HORSE_CHESTNUT",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "SILVER_FIR",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "PEACOCK_BUTTERFLY",
+   "cost": 0,
+   "types": [
+    "BUTTERFLY",
+    "INSECT"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "TOP",
+     "treeSymbol": "HORSE_CHESTNUT",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "TOP",
+     "treeSymbol": "LINDEN",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "TOP",
+     "treeSymbol": "SILVER_FIR",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "TOP",
+     "treeSymbol": "OAK",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "PENNY_BUN",
+   "cost": 2,
+   "types": [
+    "MUSHROOM"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "DOUGLAS_FIR",
+     "count": 2,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "POND_TURTLE",
+   "cost": 2,
+   "types": [
+    "AMPHIBIAN"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "BIRCH",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "SYCAMORE",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "PURPLE_EMPEROR",
+   "cost": 0,
+   "types": [
+    "BUTTERFLY",
+    "INSECT"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "TOP",
+     "treeSymbol": "BIRCH",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "TOP",
+     "treeSymbol": "HORSE_CHESTNUT",
+     "count": 2,
+     "extraTypes": null
+    },
+    {
+     "position": "TOP",
+     "treeSymbol": "LINDEN",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "RACCOON",
+   "cost": 1,
+   "types": [
+    "PAWED_ANIMAL"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "LEFT",
+     "treeSymbol": "DOUGLAS_FIR",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "LEFT",
+     "treeSymbol": "SILVER_FIR",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "BIRCH",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "SILVER_FIR",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "RED_DEER",
+   "cost": 2,
+   "types": [
+    "CLOVENHOOFED_ANIMAL",
+    "DEER"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "LEFT",
+     "treeSymbol": "LINDEN",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "LEFT",
+     "treeSymbol": "SILVER_FIR",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "HORSE_CHESTNUT",
+     "count": 2,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "OAK",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "RED_FOX",
+   "cost": 2,
+   "types": [
+    "PAWED_ANIMAL"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "LEFT",
+     "treeSymbol": "BEECH",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "LEFT",
+     "treeSymbol": "LINDEN",
+     "count": 2,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "DOUGLAS_FIR",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "OAK",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "RED_SQUIRREL",
+   "cost": 0,
+   "types": [
+    "PAWED_ANIMAL"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "TOP",
+     "treeSymbol": "BEECH",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "TOP",
+     "treeSymbol": "DOUGLAS_FIR",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "TOP",
+     "treeSymbol": "HORSE_CHESTNUT",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "TOP",
+     "treeSymbol": "OAK",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "ROE_DEER",
+   "cost": 2,
+   "types": [
+    "CLOVENHOOFED_ANIMAL",
+    "DEER"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "LEFT",
+     "treeSymbol": "LINDEN",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "LEFT",
+     "treeSymbol": "SILVER_FIR",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "BEECH",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "BIRCH",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "HORSE_CHESTNUT",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "SILVER_WASHED_FRITILLARY",
+   "cost": 0,
+   "types": [
+    "BUTTERFLY",
+    "INSECT"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "TOP",
+     "treeSymbol": "BEECH",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "TOP",
+     "treeSymbol": "OAK",
+     "count": 3,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "SQUEAKER",
+   "cost": 0,
+   "types": [
+    "CLOVENHOOFED_ANIMAL"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "LEFT",
+     "treeSymbol": "HORSE_CHESTNUT",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "LEFT",
+     "treeSymbol": "OAK",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "OAK",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "SYCAMORE",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "STAG_BEETLE",
+   "cost": 2,
+   "types": [
+    "INSECT"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "BIRCH",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "SYCAMORE",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "TAWNY_OWL",
+   "cost": 2,
+   "types": [
+    "BIRD"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "TOP",
+     "treeSymbol": "BEECH",
+     "count": 2,
+     "extraTypes": null
+    },
+    {
+     "position": "TOP",
+     "treeSymbol": "BIRCH",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "TOP",
+     "treeSymbol": "SYCAMORE",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "TREE_FERNS",
+   "cost": 1,
+   "types": [
+    "PLANT"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "HORSE_CHESTNUT",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "LINDEN",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "SILVER_FIR",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "TREE_FROG",
+   "cost": 0,
+   "types": [
+    "AMPHIBIAN"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "LINDEN",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "OAK",
+     "count": 2,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "VIOLET_CARPENTER_BEE",
+   "cost": 1,
+   "types": [
+    "INSECT"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "LEFT",
+     "treeSymbol": "DOUGLAS_FIR",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "LEFT",
+     "treeSymbol": "SILVER_FIR",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "DOUGLAS_FIR",
+     "count": 2,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "WILD_BOAR",
+   "cost": 2,
+   "types": [
+    "CLOVENHOOFED_ANIMAL"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "LEFT",
+     "treeSymbol": "BIRCH",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "LEFT",
+     "treeSymbol": "SYCAMORE",
+     "count": 2,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "DOUGLAS_FIR",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "OAK",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "WILD_STRAWBERRIES",
+   "cost": 0,
+   "types": [
+    "PLANT"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "BIRCH",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "SYCAMORE",
+     "count": 2,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "WOLF",
+   "cost": 3,
+   "types": [
+    "PAWED_ANIMAL"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "LEFT",
+     "treeSymbol": "DOUGLAS_FIR",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "LEFT",
+     "treeSymbol": "SYCAMORE",
+     "count": 1,
+     "extraTypes": null
+    },
+    {
+     "position": "RIGHT",
+     "treeSymbol": "SILVER_FIR",
+     "count": 2,
+     "extraTypes": null
+    }
+   ]
+  },
+  {
+   "name": "WOOD_ANT",
+   "cost": 0,
+   "types": [
+    "INSECT"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "BEECH",
+     "count": 2,
+     "extraTypes": null
+    },
+    {
+     "position": "BOTTOM",
+     "treeSymbol": "BIRCH",
+     "count": 1,
+     "extraTypes": null
+    }
+   ]
+  }
+ ],
+ "woodyPlants": [
+  {
+   "name": "BEECH",
+   "cost": 1,
+   "types": [
+    "TREE"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "treeSymbol": "BEECH",
+     "count": 10
+    }
+   ]
+  },
+  {
+   "name": "BIRCH",
+   "cost": 0,
+   "types": [
+    "TREE"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "treeSymbol": "BIRCH",
+     "count": 10
+    }
+   ]
+  },
+  {
+   "name": "DOUGLAS_FIR",
+   "cost": 2,
+   "types": [
+    "TREE"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "treeSymbol": "DOUGLAS_FIR",
+     "count": 7
+    }
+   ]
+  },
+  {
+   "name": "HORSE_CHESTNUT",
+   "cost": 2,
+   "types": [
+    "TREE"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "treeSymbol": "HORSE_CHESTNUT",
+     "count": 11
+    }
+   ]
+  },
+  {
+   "name": "LINDEN",
+   "cost": 1,
+   "types": [
+    "TREE"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "treeSymbol": "LINDEN",
+     "count": 9
+    }
+   ]
+  },
+  {
+   "name": "OAK",
+   "cost": 2,
+   "types": [
+    "TREE"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "treeSymbol": "OAK",
+     "count": 7
+    }
+   ]
+  },
+  {
+   "name": "SAPLING",
+   "cost": 0,
+   "types": [
+    "TREE"
+   ],
+   "isPartOfDeck": false,
+   "variants": [
+    {
+     "treeSymbol": null,
+     "count": null
+    }
+   ]
+  },
+  {
+   "name": "SILVER_FIR",
+   "cost": 2,
+   "types": [
+    "TREE"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "treeSymbol": "SILVER_FIR",
+     "count": 6
+    }
+   ]
+  },
+  {
+   "name": "SYCAMORE",
+   "cost": 2,
+   "types": [
+    "TREE"
+   ],
+   "isPartOfDeck": true,
+   "variants": [
+    {
+     "treeSymbol": "SYCAMORE",
+     "count": 6
+    }
+   ]
+  }
+ ]
+}
