@@ -7,7 +7,7 @@ Statut moteur : [FAIT] déjà implémenté correctement | [MANQUE] pas implémen
 
 Renard roux | 1 | pioche 1 carte × Lièvre d'Europe possédé | - | 2 pts × Lièvre d'Europe [MANQUE l'effet pioche, score déjà FAIT]
 Lièvre d'Europe | ? | - | non | N² où N=nombre de lièvres [FAIT — score et partage de slot. Corrigé lors de la revue : pas de "bonus jumelles" séparé, le N² EST le score de base, pas un bonus qui s'ajouterait par-dessus (confirmé par Mehdi)]
-Taupe | ? | Jouez immédiatement autant de cartes que souhaité en payant leurs coûts | - | 0 [FAIT - chaîne d'actions payantes, arrêt automatique ou skip_effect]
+Taupe | ? | Jouez immédiatement autant de cartes que souhaité en payant leurs coûts | - | 0 [FAIT - chaîne d'actions payantes, arrêt automatique ou skip_effect. Confirmé par Mehdi lors de la revue : chaque carte posée pendant la chaîne est payée normalement (action gratuite, PAS une pose gratuite), donc déclenche normalement ses effets de pose et son bonus jumelles -- y compris, imbriqué, si elle ouvre elle-même un sous-choix (Raton laveur, une autre Taupe, Blaireau/Lucane/Salamandre/Sapin blanc/Cerf élaphe). Un rejeu de tour gagné pendant la chaîne s'applique à sa fin (`Game.pending_replay`), pas immédiatement]
 Ours brun | ? | Placez toutes les cartes de la Clairière dans votre Grotte | - | 0 (les points viennent de la Grotte) [FAIT — clairière/grotte simulées (CLEARING_TO_CAVE_DWELLERS, game.py), voir aussi ligne 27]
 Raton laveur | ? | Placez autant de cartes que voulu de la main directement sur la Grotte (1 pt chacune au score, `forest.cave`), et piochez le même nombre | - | ? [FAIT]
 Blaireau européen | ? | Placez un spécimen Plantigrade/digitigrade gratuit depuis la main | 2 glands × (bonus) | ? [FAIT]

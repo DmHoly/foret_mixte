@@ -905,3 +905,168 @@ def test_fire_salamander_play_free_if_bonus():
     assert g.pending_effect is None, "un seul usage -> effet clos après la pose"
     assert len(player.hand) == n_before - 1
     assert player.forest.dweller_count[free_animal_did] == 1
+
+
+def test_mole_chain_triggers_pose_effects():
+    """Confirmé par Mehdi : une carte posée PENDANT la chaîne de la Taupe est
+    payée normalement (une action gratuite, pas une pose gratuite), donc
+    déclenche normalement ses effets de pose -- contrairement à une vraie
+    pose gratuite (Blaireau/Lucane/Salamandre/Moustique/Sapin blanc/Cerf
+    élaphe), qui n'en déclenche aucun."""
+    import game as G
+
+    g = G.Game(n_players=2, seed=13)
+    filler_tree = (G.TREE, E.TREE_ID["OAK"], None)
+    mole_did = E.DWELLER_ID["MOLE"]
+    mole_pos = list(E.VALID_POS[mole_did])[0]
+    mole_card = (G.DWELLER, (mole_did, E.TREE_ID["OAK"], mole_pos), (mole_did, E.TREE_ID["OAK"], mole_pos))
+    mole_cost = E.DWELLER_COST[mole_did]
+
+    turtle_did = E.DWELLER_ID["POND_TURTLE"]  # DRAW_FIXED = 1
+    turtle_pos = list(E.VALID_POS[turtle_did])[0]
+    turtle_card = (G.DWELLER, (turtle_did, E.TREE_ID["BIRCH"], turtle_pos), (turtle_did, E.TREE_ID["BIRCH"], turtle_pos))
+    turtle_cost = E.DWELLER_COST[turtle_did]
+
+    player = g.players[0]
+    player.forest.add_tree(E.TREE_ID["OAK"])
+    player.forest.add_tree(E.TREE_ID["OAK"])
+    player.hand = ([mole_card] + [filler_tree] * mole_cost
+                    + [turtle_card] + [filler_tree] * turtle_cost)
+    g.deck = [filler_tree] * 10
+    g.current = 0
+
+    g.apply(("dweller", mole_did, 0, mole_pos))
+    assert g.pending_effect == ("play_chain", None, None)
+
+    hand_before = len(player.hand)
+    g.apply(("dweller", turtle_did, 1, turtle_pos))
+    hand_after = len(player.hand)
+    # -1 tortue jouée, -cost payé, +1 pioche de base (DRAW_FIXED)
+    assert hand_after == hand_before - 1 - turtle_cost + 1
+    assert g.pending_effect == ("play_chain", None, None), "la chaîne continue"
+
+
+def test_mole_chain_bonus_jumelles():
+    """Le bonus jumelles se déclenche normalement pendant la chaîne de la
+    Taupe (paiement avec une carte du bon symbole) -- corrige un manque où
+    choose_payment n'était même pas informé du symbole pendant la chaîne."""
+    import game as G
+
+    g = G.Game(n_players=2, seed=23)
+    filler_tree = (G.TREE, E.TREE_ID["OAK"], None)
+    mole_did = E.DWELLER_ID["MOLE"]
+    mole_pos = list(E.VALID_POS[mole_did])[0]
+    mole_card = (G.DWELLER, (mole_did, E.TREE_ID["OAK"], mole_pos), (mole_did, E.TREE_ID["OAK"], mole_pos))
+    mole_cost = E.DWELLER_COST[mole_did]
+
+    hedgehog_did = E.DWELLER_ID["HEDGEHOG"]  # DRAW_IF_BONUS = 1
+    hedgehog_pos = list(E.VALID_POS[hedgehog_did])[0]
+    symbol = E.TREE_ID["BIRCH"]  # different du symbole de la Taupe (Chêne)
+    hedgehog_card = (G.DWELLER, (hedgehog_did, symbol, hedgehog_pos), (hedgehog_did, symbol, hedgehog_pos))
+    hedgehog_cost = E.DWELLER_COST[hedgehog_did]
+    wood_ant = E.DWELLER_ID["WOOD_ANT"]
+    bonus_payer = (G.DWELLER, (wood_ant, symbol, list(E.VALID_POS[wood_ant])[0]),
+                   (wood_ant, symbol, list(E.VALID_POS[wood_ant])[0]))
+
+    player = g.players[0]
+    player.forest.add_tree(E.TREE_ID["OAK"])
+    player.forest.add_tree(E.TREE_ID["OAK"])
+    player.hand = ([mole_card] + [filler_tree] * mole_cost
+                    + [hedgehog_card, bonus_payer] + [filler_tree] * max(0, hedgehog_cost - 1))
+    g.deck = [filler_tree] * 10
+    g.current = 0
+
+    g.apply(("dweller", mole_did, 0, mole_pos))
+    hand_before = len(player.hand)
+    g.apply(("dweller", hedgehog_did, 1, hedgehog_pos))
+    assert g.last_bonus_paid
+    hand_after = len(player.hand)
+    # -1 hérisson joué, -cost payé, +1 pioche bonus
+    assert hand_after == hand_before - 1 - hedgehog_cost + 1
+
+
+def test_mole_chain_nests_cave_choice():
+    """Un Raton laveur posé PENDANT la chaîne de la Taupe ouvre son propre
+    sous-choix (cave_choice), confirmé par Mehdi comme devant s'imbriquer :
+    il s'empile par-dessus la chaîne et lui rend la main une fois résolu."""
+    import game as G
+
+    g = G.Game(n_players=2, seed=17)
+    filler_tree = (G.TREE, E.TREE_ID["OAK"], None)
+    mole_did = E.DWELLER_ID["MOLE"]
+    mole_pos = list(E.VALID_POS[mole_did])[0]
+    mole_card = (G.DWELLER, (mole_did, E.TREE_ID["OAK"], mole_pos), (mole_did, E.TREE_ID["OAK"], mole_pos))
+    mole_cost = E.DWELLER_COST[mole_did]
+
+    raccoon_did = E.DWELLER_ID["RACCOON"]
+    raccoon_pos = list(E.VALID_POS[raccoon_did])[0]
+    raccoon_card = (G.DWELLER, (raccoon_did, E.TREE_ID["BIRCH"], raccoon_pos), (raccoon_did, E.TREE_ID["BIRCH"], raccoon_pos))
+    raccoon_cost = E.DWELLER_COST[raccoon_did]
+
+    player = g.players[0]
+    player.forest.add_tree(E.TREE_ID["OAK"])
+    player.forest.add_tree(E.TREE_ID["OAK"])
+    player.hand = ([mole_card] + [filler_tree] * mole_cost
+                    + [raccoon_card] + [filler_tree] * (raccoon_cost + 3))
+    g.deck = [filler_tree] * 10
+    g.current = 0
+
+    g.apply(("dweller", mole_did, 0, mole_pos))
+    assert g.pending_effect == ("play_chain", None, None)
+
+    g.apply(("dweller", raccoon_did, 1, raccoon_pos))
+    assert g.pending_effect == ("cave_choice", None, None), \
+        "le sous-choix du Raton laveur doit s'empiler par-dessus la chaîne"
+    assert len(g._pending_stack) == 2
+
+    cave_before = player.forest.cave
+    g.apply(("cave_discard", 2))
+    assert player.forest.cave == cave_before + 2
+    assert g.pending_effect == ("play_chain", None, None), \
+        "de retour à la chaîne après résolution du sous-choix"
+    assert len(g._pending_stack) == 1
+    assert g.current == 0, "toujours le même joueur, la chaîne continue"
+
+    g.apply(("skip_effect",))
+    assert g.pending_effect is None
+    assert g.current == 1
+
+
+def test_mole_chain_defers_replay_to_end_of_chain():
+    """Un rejeu de tour gagné PENDANT la chaîne de la Taupe (Geai des chênes,
+    inconditionnel) s'applique à la FIN de la chaîne, pas immédiatement --
+    confirmé par Mehdi : il ne se perd pas juste parce que la chaîne
+    continuait au moment où il a été gagné."""
+    import game as G
+
+    g = G.Game(n_players=2, seed=19)
+    filler_tree = (G.TREE, E.TREE_ID["OAK"], None)
+    mole_did = E.DWELLER_ID["MOLE"]
+    mole_pos = list(E.VALID_POS[mole_did])[0]
+    mole_card = (G.DWELLER, (mole_did, E.TREE_ID["OAK"], mole_pos), (mole_did, E.TREE_ID["OAK"], mole_pos))
+    mole_cost = E.DWELLER_COST[mole_did]
+
+    jay_did = E.DWELLER_ID["EURASIAN_JAY"]
+    jay_pos = list(E.VALID_POS[jay_did])[0]
+    jay_card = (G.DWELLER, (jay_did, E.TREE_ID["BIRCH"], jay_pos), (jay_did, E.TREE_ID["BIRCH"], jay_pos))
+    jay_cost = E.DWELLER_COST[jay_did]
+
+    player = g.players[0]
+    player.forest.add_tree(E.TREE_ID["OAK"])
+    player.forest.add_tree(E.TREE_ID["OAK"])
+    player.hand = ([mole_card] + [filler_tree] * mole_cost
+                    + [jay_card] + [filler_tree] * jay_cost)
+    g.deck = [filler_tree] * 10
+    g.current = 0
+
+    g.apply(("dweller", mole_did, 0, mole_pos))
+    g.apply(("dweller", jay_did, 1, jay_pos))
+    assert g.pending_replay, "le rejeu doit être mémorisé, pas appliqué immédiatement"
+    assert g.current == 0
+    assert g.pending_effect == ("play_chain", None, None), \
+        "la chaîne continue malgré le rejeu en attente"
+
+    g.apply(("skip_effect",))
+    assert g.pending_effect is None
+    assert g.current == 0, "le rejeu accumulé pendant la chaîne s'applique à sa fin"
+    assert not g.pending_replay, "consommé"
