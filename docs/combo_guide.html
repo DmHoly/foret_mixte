@@ -400,8 +400,8 @@ footer.colophon {
   
 <p class="dek">Espérance de points par combo, mesurée sur 600 forêts
 gloutonnes et 18 forêts MCTS (config recommandée : rollout court +
-modèle contrastif, 200 itérations). Chaque ligne décompose <code>Forest.score()</code> terme par terme —
-la somme des termes est vérifiée égale au score réel du moteur sur chaque forêt.</p>
+modèle contrastif). Chaque ligne décompose <code>Forest.score()</code> terme par terme — la somme des
+termes est vérifiée égale au score réel du moteur sur chaque forêt.</p>
 
 <section aria-labelledby="top-combos">
   <h2 id="top-combos">Les 6 combos qui rapportent le plus, en moyenne</h2>
@@ -775,8 +775,8 @@ la somme des termes est vérifiée égale au score réel du moteur sur chaque fo
 
 <section aria-labelledby="sycamore-note">
   <h2 id="sycamore-note">Le cas Sycomore</h2>
-  <p class="section-note">Point de départ de cette étude : le Sycomore ne score PAS avec le nombre
-  d'habitants, mais avec le nombre total d'<strong>arbres</strong> de la forêt (<code>pts = nb_Sycomores x nb_arbres_total</code>).
+  <p class="section-note">Le Sycomore ne score PAS avec le nombre d'habitants, mais avec le nombre total
+  d'<strong>arbres</strong> de la forêt (<code>pts = nb_Sycomores x nb_arbres_total</code>).
   Verdict des données : loin d'être sous-optimal, c'est le combo n&deg;1 du jeu par espérance de points —
   devant le Lièvre au carré, la Fouine et le Chevreuil.</p>
   <div class="stat-strip">
@@ -810,7 +810,7 @@ la somme des termes est vérifiée égale au score réel du moteur sur chaque fo
 
   <footer class="colophon">
     <span>600 forets gloutonnes</span>
-    <span>18 forets MCTS (hybride, 200 it.)</span>
+    <span>18 forets MCTS (hybride)</span>
     <span>score() decompose terme a terme, verifie contre le moteur</span>
   </footer>
 </div>
