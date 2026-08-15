@@ -17,25 +17,37 @@ appariements réels des moitiés ne sont pas publiés ; ils sont ici tirés au
 hasard à chaque partie (Top avec Bottom, Left avec Right), ce qui préserve la
 bonne distribution marginale et la bonne taille de deck.
 
+Clairière (confirmé par Mehdi) : les cartes défaussées en paiement rejoignent
+`Game.clearing`, une zone commune face visible. À CHAQUE pioche du jeu — tour
+normal ou effet de carte, sans distinction — le joueur peut prendre une carte
+connue de la Clairière au lieu de piocher à l'aveugle dans le deck. Au-delà de
+10 cartes, la Clairière est vidée (cartes perdues, pas remélangées).
+`_draw_one` centralise ce choix pour que tous les points de pioche en
+bénéficient automatiquement ; QUELLE carte prendre reste une heuristique
+(`choose_draw_source`), pas une décision de l'arbre de recherche — l'exposer
+multiplierait le facteur de branchement sur l'action la plus fréquente de la
+partie, comme `choose_payment` déjà simplifié pour la même raison.
+
+Grotte : alimentée par l'effet du Raton laveur (CAVE_CHOICE_DWELLERS dans
+engine.py, décision réelle) et par celui de l'Ours brun (CLEARING_TO_CAVE_
+DWELLERS, inconditionnel : vide toute la Clairière dans sa Grotte). Il n'y a
+pas de point gratuit par habitant posé.
+
 Ce qui n'est PAS implémenté, et qui reste à faire pour un bot fiable :
-  - pioche depuis la clairière (uniquement depuis le deck ici)
-  - vidage de la clairière à 10 cartes
   - bonus de paiement par couleur (Silver Fir, Douglas Fir, Oak, Badger,
     Fire Salamander, Stag Beetle)
   - moteurs de pioche des champignons (Chanterelle, Penny Bun, Parasol,
     Fly Agaric)
-  - grotte : alimentée uniquement par l'effet du Raton laveur (voir
-    CAVE_CHOICE_DWELLERS dans engine.py), conformément au livret de règles.
-    Il n'y a pas de point gratuit par habitant posé.
 """
 
 import random
 
 from engine import (
-    CAVE_CHOICE_DWELLERS, DRAW_FIXED, DRAW_IF_BONUS, DRAW_PER_COUNT,
-    DWELLER_COST, DWELLER_NAME, DWELLER_PLAY_FREE_IF_BONUS, DWELLER_TYPE_IDS,
-    FILTER_ANY_ANIMAL, FILTER_DWELLER, FILTER_TYPE, IS_ANIMAL,
-    MUSHROOM_TRIGGER, MUSHROOM_TRIGGER_ANIMAL, MUSHROOM_TRIGGER_ANY_SYMBOL,
+    CAVE_CHOICE_DWELLERS, CLEARING_TO_CAVE_DWELLERS, DRAW_FIXED,
+    DRAW_IF_BONUS, DRAW_PER_COUNT, DWELLER_COST, DWELLER_NAME,
+    DWELLER_PLAY_FREE_IF_BONUS, DWELLER_TYPE_IDS, FILTER_ANY_ANIMAL,
+    FILTER_DWELLER, FILTER_TYPE, IS_ANIMAL, MUSHROOM_TRIGGER,
+    MUSHROOM_TRIGGER_ANIMAL, MUSHROOM_TRIGGER_ANY_SYMBOL,
     MUSHROOM_TRIGGER_POSITION, N_DWELLERS, PLAY_CHAIN_DWELLERS, POS_ID,
     REPLAY_ALWAYS, REPLAY_IF_BONUS, SHARE_MAX, TREE_COPIES, TREE_COST,
     TREE_DRAW_FIXED, TREE_NAME, TREE_PLAY_FREE_IF_BONUS, TREE_REPLAY_ALWAYS,
@@ -110,6 +122,36 @@ def card_symbol(card, half_index):
     return half[1]
 
 
+def card_min_cost(card):
+    """Coût le plus bas entre les deux moitiés jouables (un Arbre n'a qu'un
+    coût). Sert à choisir la carte la plus "flexible" dans la Clairière.
+    """
+    if card[0] == TREE:
+        return card_cost(card, 0)
+    return min(card_cost(card, 0), card_cost(card, 1))
+
+
+def choose_draw_source(clearing):
+    """Choix pioche Clairière vs pioche aveugle (deck), à CHAQUE pioche du
+    jeu (tour normal ou effet de carte, confirmé par Mehdi).
+
+    Heuristique, pas une décision de recherche : exposer ce choix à l'arbre
+    multiplierait le facteur de branchement sur l'action la plus fréquente
+    de la partie, pour un gain incertain. Une carte connue de la Clairière
+    est presque toujours au moins aussi utile qu'une carte aveugle inconnue
+    (on peut toujours la garder sans la jouer), donc on prend
+    systématiquement la moins chère de la Clairière quand elle est non
+    vide ; pioche aveugle sinon. Simplification assumée, comme
+    `choose_payment` et la sélection des cartes envoyées à la Grotte.
+
+    Retourne l'indice dans `clearing` à prendre, ou None pour piocher dans
+    le deck.
+    """
+    if not clearing:
+        return None
+    return min(range(len(clearing)), key=lambda i: card_min_cost(clearing[i]))
+
+
 class Player:
     __slots__ = ("hand", "forest")
 
@@ -172,6 +214,10 @@ class Game:
     # -- pioche ------------------------------------------------------------
 
     def _draw_one(self, player):
+        idx = choose_draw_source(self.clearing)
+        if idx is not None:
+            player.hand.append(self.clearing.pop(idx))
+            return
         if not self.deck:
             self.over = True
             return
@@ -182,6 +228,16 @@ class Game:
                 self.over = True
             return
         player.hand.append(card)
+
+    def _add_to_clearing(self, card):
+        """Ajoute une carte défaussée en paiement à la Clairière (zone
+        commune face visible). Vidage à 10 confirmé par Mehdi : au-delà, les
+        cartes sont perdues (retirées définitivement de la partie), pas
+        remélangées dans le deck.
+        """
+        self.clearing.append(card)
+        if len(self.clearing) >= 10:
+            self.clearing.clear()
 
     # -- actions -----------------------------------------------------------
 
@@ -368,7 +424,7 @@ class Game:
                     for j in payment
                 )
             for j in sorted(payment, reverse=True):
-                self.clearing.append(player.hand.pop(j))
+                self._add_to_clearing(player.hand.pop(j))
             if action[0] == "tree":
                 tree_id = action[1]
                 player.forest.add_tree(tree_id)
@@ -440,7 +496,7 @@ class Game:
             cost = card_cost(card, half_index)
             payment = choose_payment(player.hand, cost)
             for j in sorted(payment, reverse=True):
-                self.clearing.append(player.hand.pop(j))
+                self._add_to_clearing(player.hand.pop(j))
             if action[0] == "tree":
                 player.forest.add_tree(action[1])
             else:
@@ -488,6 +544,11 @@ class Game:
         Voir engine.py pour les tables et reference/cartes_effets.md pour
         la source des règles.
         """
+        if did in CLEARING_TO_CAVE_DWELLERS:
+            # Ours brun : effet inconditionnel, avant le tirage/rejeu bonus
+            # jumelles éventuel (tables génériques ci-dessous).
+            player.forest.cave += len(self.clearing)
+            self.clearing.clear()
         for _ in range(DRAW_FIXED.get(did, 0)):
             self._draw_one(player)
         if self.last_bonus_paid:

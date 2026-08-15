@@ -81,6 +81,7 @@ for name, cap in SLOT_SHARING.items():
 # Identifiants utilisés dans les règles
 D_BEECH_MARTEN = DWELLER_ID["BEECH_MARTEN"]
 D_BLACKBERRIES = DWELLER_ID["BLACKBERRIES"]
+D_BROWN_BEAR = DWELLER_ID["BROWN_BEAR"]
 D_BULLFINCH = DWELLER_ID["BULLFINCH"]
 D_CHAFFINCH = DWELLER_ID["CHAFFINCH"]
 D_COMMON_TOAD = DWELLER_ID["COMMON_TOAD"]
@@ -174,6 +175,9 @@ DRAW_IF_BONUS = {
     D_ROE_DEER: 1,       # Chevreuil
     D_FALLOW_DEER: 2,    # Daim
     D_HEDGEHOG: 1,       # Hérisson commun
+    D_BROWN_BEAR: 1,     # Ours brun (nombre non confirmé par Mehdi, "?" dans
+                          # cartes_effets.md ; 1 par défaut, cohérent avec le
+                          # reste de cette table)
 }
 
 DRAW_PER_COUNT = {
@@ -182,7 +186,7 @@ DRAW_PER_COUNT = {
 }
 
 REPLAY_ALWAYS = frozenset({D_EURASIAN_JAY})  # Geai des chênes, inconditionnel
-REPLAY_IF_BONUS = frozenset({D_WOLF})        # Loup, si bonus jumelles payé
+REPLAY_IF_BONUS = frozenset({D_WOLF, D_BROWN_BEAR})  # bonus jumelles payé
 # Sapin Douglas (dweller "SI bonus : rejoue un tour") pas encore ajouté ici :
 # son dweller_id précis n'a pas été identifié dans le catalogue de Mehdi
 # (nom générique "Sapin Douglas", à confirmer contre cards.py avant d'ajouter
@@ -225,6 +229,15 @@ TREE_PLAY_FREE_IF_BONUS = {
 # heuristique cachée.
 D_RACCOON = DWELLER_ID["RACCOON"]
 CAVE_CHOICE_DWELLERS = frozenset({D_RACCOON})
+
+# Ours brun : à la pose, déplace INCONDITIONNELLEMENT toutes les cartes de
+# la Clairière (Game.clearing) dans sa Grotte (confirmé par Mehdi). Pas de
+# sous-choix (aucune carte à trier, elles y vont toutes), donc pas de
+# pending_effect dédié : résolu directement dans _resolve_dweller_effect
+# (game.py), qui a accès à self.clearing. Le tirage bonus jumelles (1 carte)
+# et le rejeu de tour bonus jumelles rentrent dans les tables génériques
+# DRAW_IF_BONUS / REPLAY_IF_BONUS ci-dessus.
+CLEARING_TO_CAVE_DWELLERS = frozenset({D_BROWN_BEAR})
 
 # Taupe (batch 2d) : "jouez immédiatement autant de cartes que souhaité en
 # payant leur coût" — chaîne d'actions de pose normales (payantes), pas de

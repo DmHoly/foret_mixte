@@ -582,3 +582,108 @@ def test_mushroom_permanent_triggers():
     after2 = len(player.hand)
     assert after2 == before2 - 1 - other_cost + 1, \
         "le Cèpe de Bordeaux doit se redéclencher sur une pose ultérieure en Top"
+
+
+def test_clearing_capped_at_ten():
+    """Vidage à 10 confirmé par Mehdi : au-delà de 10 cartes, la Clairière
+    est vidée (cartes perdues, pas remélangées dans le deck)."""
+    import game as G
+
+    g = G.Game(n_players=2, seed=1)
+    filler_tree = (G.TREE, E.TREE_ID["OAK"], None)
+    for _ in range(9):
+        g._add_to_clearing(filler_tree)
+    assert len(g.clearing) == 9
+    g._add_to_clearing(filler_tree)
+    assert len(g.clearing) == 0, "10e carte -> vidage immédiat"
+
+
+def test_draw_prefers_cheapest_clearing_card():
+    """Confirmé par Mehdi : à CHAQUE pioche (tour normal ou effet), le
+    joueur peut prendre une carte connue de la Clairière au lieu de piocher
+    à l'aveugle. `choose_draw_source` (heuristique) doit préférer la carte
+    la moins chère de la Clairière plutôt que toucher au deck."""
+    import game as G
+
+    g = G.Game(n_players=2, seed=1)
+    cheap_tree = min(range(len(E.TREE_COST)), key=lambda t: E.TREE_COST[t])
+    expensive_tree = max(range(len(E.TREE_COST)), key=lambda t: E.TREE_COST[t])
+    assert E.TREE_COST[cheap_tree] < E.TREE_COST[expensive_tree]
+    cheap_card = (G.TREE, cheap_tree, None)
+    expensive_card = (G.TREE, expensive_tree, None)
+    g.clearing = [expensive_card, cheap_card]
+    g.deck = [(G.TREE, E.TREE_ID["OAK"], None)]
+    player = g.players[0]
+    hand_before = len(player.hand)
+    deck_before = len(g.deck)
+
+    g._draw_one(player)
+
+    assert player.hand[-1] == cheap_card
+    assert len(player.hand) == hand_before + 1
+    assert g.clearing == [expensive_card]
+    assert len(g.deck) == deck_before, "le deck ne doit pas être touché tant que la Clairière peut fournir"
+
+    g.clearing = []
+    g._draw_one(player)
+    assert player.hand[-1] == (G.TREE, E.TREE_ID["OAK"], None), "Clairière vide -> pioche aveugle dans le deck"
+
+
+def test_brown_bear_moves_clearing_to_cave():
+    """Ours brun : effet INCONDITIONNEL, vide toute la Clairière (y compris
+    ses propres cartes de paiement, déjà défaussées à ce stade) dans sa
+    Grotte, indépendamment du bonus jumelles (confirmé par Mehdi)."""
+    import game as G
+
+    g = G.Game(n_players=2, seed=3)
+    filler_tree = (G.TREE, E.TREE_ID["OAK"], None)
+    did = E.DWELLER_ID["BROWN_BEAR"]
+    pos = list(E.VALID_POS[did])[0]
+    card = (G.DWELLER, (did, E.TREE_ID["OAK"], pos), (did, E.TREE_ID["OAK"], pos))
+    cost = E.DWELLER_COST[did]
+    player = g.players[0]
+    player.forest.add_tree(E.TREE_ID["OAK"])
+    player.hand = [card] + [filler_tree] * cost
+    g.clearing = [filler_tree, filler_tree, filler_tree]
+    g.deck = [filler_tree] * 5
+    g.current = 0
+    cave_before = player.forest.cave
+    expected_moved = len(g.clearing) + cost  # + les cartes utilisées pour payer CETTE pose
+
+    g.apply(("dweller", did, 0, pos))
+
+    assert not g.last_bonus_paid, "paiement en Arbres (sans symbole) : pas de bonus jumelles ici"
+    assert player.forest.cave == cave_before + expected_moved
+    assert g.clearing == []
+
+
+def test_brown_bear_bonus_draws_and_replays():
+    """Bonus jumelles sur l'Ours brun (confirmé par Mehdi) : l'effet
+    Clairière -> Grotte reste inconditionnel, mais la pioche ET le rejeu de
+    tour ne se déclenchent QUE si payé avec le bonus."""
+    import game as G
+
+    g = G.Game(n_players=2, seed=5)
+    did = E.DWELLER_ID["BROWN_BEAR"]
+    pos = list(E.VALID_POS[did])[0]
+    symbol = E.VARIANTS[did][0][0]
+    card = (G.DWELLER, (did, symbol, pos), (did, symbol, pos))
+    wood_ant = E.DWELLER_ID["WOOD_ANT"]
+    bonus_payer = (G.DWELLER, (wood_ant, symbol, list(E.VALID_POS[wood_ant])[0]),
+                   (wood_ant, symbol, list(E.VALID_POS[wood_ant])[0]))
+    filler_tree = (G.TREE, E.TREE_ID["OAK"], None)
+    cost = E.DWELLER_COST[did]
+    player = g.players[0]
+    player.forest.add_tree(symbol)
+    player.hand = [card, bonus_payer] + [filler_tree] * max(0, cost - 1)
+    g.deck = [filler_tree] * 5
+    g.current = 0
+    hand_before = len(player.hand)
+
+    g.apply(("dweller", did, 0, pos))
+
+    assert g.last_bonus_paid
+    assert player.forest.cave == cost, "l'effet inconditionnel doit aussi s'appliquer quand le bonus est payé"
+    # -1 carte jouée, -cost défaussées en paiement, +1 pioche bonus
+    assert len(player.hand) == hand_before - 1 - cost + 1
+    assert g.current == 0, "l'Ours brun doit faire rejouer le même joueur si le bonus est payé"

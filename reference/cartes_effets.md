@@ -8,7 +8,7 @@ Statut moteur : [FAIT] déjà implémenté correctement | [MANQUE] pas implémen
 Renard roux | 1 | pioche 1 carte × Lièvre d'Europe possédé | - | 2 pts × Lièvre d'Europe [MANQUE l'effet pioche, score déjà FAIT]
 Lièvre d'Europe | ? | - | 1 par Lièvre d'Europe (bonus jumelles) | N² où N=nombre de lièvres [FAIT le score et le partage de slot, MANQUE le bonus jumelles]
 Taupe | ? | Jouez immédiatement autant de cartes que souhaité en payant leurs coûts | - | 0 [FAIT - chaîne d'actions payantes, arrêt automatique ou skip_effect]
-Ours brun | ? | Placez toutes les cartes de la Clairière dans votre Grotte | - | 0 (les points viennent de la Grotte) [MANQUE, clairière/grotte non simulées]
+Ours brun | ? | Placez toutes les cartes de la Clairière dans votre Grotte | - | 0 (les points viennent de la Grotte) [FAIT — clairière/grotte simulées (CLEARING_TO_CAVE_DWELLERS, game.py), voir aussi ligne 27]
 Raton laveur | ? | Placez autant de cartes que voulu de la main directement sur la Grotte (1 pt chacune au score, `forest.cave`), et piochez le même nombre | - | ? [FAIT]
 Blaireau européen | ? | Placez un spécimen Plantigrade/digitigrade gratuit depuis la main | 2 glands × (bonus) | ? [FAIT]
 Sapin blanc (arbre) | 2 | SI payé avec une carte de symbole Sapin blanc (bonus jumelles) : joue gratuitement un animal depuis la main | oui | 2 pts × carte rattachée à ce Sapin blanc [FAIT en brique 2b, score déjà FAIT]
@@ -24,7 +24,7 @@ Cèpe de Bordeaux (champignon) | ? | effet permanent : à chaque carte jouée AU
 
 Girolle (champignon) | ? | effet permanent : à chaque carte jouée portant un symbole d'arbre (n'importe lequel, pas seulement celui de la Girolle), pioche 1 carte | - | ? [FAIT]
 Chouette hulotte | ? | pioche 1 carte ; SI payé avec bonus jumelles (dépend du symbole sur la carte, comme Chevreuil) : pioche 2 cartes de plus | oui | 5 [MANQUE l'effet+bonus, score déjà dans le fichier]
-Ours brun | ? | Placez toutes les cartes de la Clairière dans votre Grotte ; SI payé avec bonus jumelles : pioche (1 carte ?) | oui | 0 (points via Grotte) [MANQUE, bloqué : clairière/grotte non simulées, mis de côté volontairement]
+Ours brun | 3 | Placez toutes les cartes de la Clairière dans votre Grotte (inconditionnel) ; SI payé avec bonus jumelles : pioche 1 carte ET rejoue un tour complet (confirmé par Mehdi) | oui | 0 (points via Grotte) [FAIT — DRAW_IF_BONUS/REPLAY_IF_BONUS + CLEARING_TO_CAVE_DWELLERS, engine.py/game.py. Nombre de cartes piochées (1) non explicitement reconfirmé par Mehdi, par défaut cohérent avec le reste de la table]
 Blaireau européen | ? | SI payé avec bonus jumelles : joue gratuitement un animal depuis la main | oui | ? [MANQUE, remplace la version précédente "Plantigrade/digitigrade"]
 Fougère arborescente | ? | pioche 1 carte (sans condition ?) | - | ? [FAIT (rattrapé, oublié dans le batch initial)]
 Lucane | ? | SI payé avec bonus jumelles (dépend de la couleur/symbole sur la carte) : joue gratuitement un oiseau depuis la main | oui | ? [FAIT]

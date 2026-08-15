@@ -191,10 +191,11 @@ policies cohérents.
 
 ## État global du refactoring
 
-Toutes les briques identifiées sont faites, sauf l'Ours brun (bloqué par
-l'absence de clairière/grotte, mise de côté volontairement). Le catalogue
-de reference/cartes_effets.md est donc entièrement câblé à l'exception de
-cette carte. Un oubli du batch 1 (Fougère arborescente, pioche fixe) a été
+Toutes les briques identifiées sont faites, y compris l'Ours brun (Clairière
+et Grotte implémentées, voir game.py : `Game.clearing`, `_add_to_clearing`,
+`choose_draw_source`, et `CLEARING_TO_CAVE_DWELLERS` dans engine.py). Le
+catalogue de reference/cartes_effets.md est donc entièrement câblé. Un oubli
+du batch 1 (Fougère arborescente, pioche fixe) a été
 rattrapé après coup, repéré en corrigeant une erreur de script sur le
 catalogue — pas de garantie qu'il n'y en ait pas d'autres du même genre,
 une relecture croisée du catalogue contre les tables DRAW_FIXED/DRAW_IF_BONUS/

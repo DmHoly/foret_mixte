@@ -124,11 +124,16 @@ Une partie complète à 2 joueurs, politique gloutonne : **2,7 ms**.
 
 | | score moyen | maximum |
 |---|---|---|
-| greedy, 2 joueurs | 212 | 277 |
+| greedy, 2 joueurs, **sans Clairière** (avant implémentation) | 212 | 277 |
 | bon joueur humain, 2 joueurs (BGA) | 250-320 | |
 
-Les parties durent ~140 tours au total (70 par joueur). Le simulateur est dans
-le bon régime pour rendre les comparaisons de politiques interprétables.
+Les parties duraient ~140 tours au total (70 par joueur) dans cette
+configuration. **Chiffres à re-mesurer et remplacer** depuis l'implémentation
+de la Clairière (voir section suivante) : elle fait passer greedy à un score
+moyen de ~670 (jusqu'à 912) sur ~270 tours dans les mêmes conditions — un
+saut qui dépasse largement le record humain cité ci-dessus, à traiter comme
+suspect tant qu'il n'a pas été confronté à des parties BGA réelles avec
+Clairière, plutôt que comme une calibration validée.
 
 ## Politiques de décision
 
@@ -253,16 +258,30 @@ Constats :
 
 ## Limitations connues
 
+**Clairière et Grotte** (implémentées, `game.py`) : les cartes défaussées en
+paiement rejoignent `Game.clearing` (zone commune face visible), vidée
+au-delà de 10 cartes (cartes perdues, pas remélangées). À chaque pioche du
+jeu — tour normal ou effet de carte — le joueur peut prendre une carte
+connue de la Clairière plutôt que piocher à l'aveugle dans le deck
+(`Game._draw_one`). L'Ours brun (`CLEARING_TO_CAVE_DWELLERS` dans
+`engine.py`) vide inconditionnellement la Clairière dans sa Grotte à la
+pose ; si payé avec le bonus jumelles, il pioche 1 carte de plus et rejoue
+un tour (comme le Loup). QUELLE carte prendre dans la Clairière reste une
+heuristique (`choose_draw_source`, prend la moins chère), pas une décision
+de l'arbre — l'exposer multiplierait le facteur de branchement sur l'action
+la plus fréquente de la partie. Voir la mise en garde sur le score moyen
+dans la [calibration des scores](#calibration-des-scores) : cette
+implémentation change fortement la dynamique de jeu et n'a pas encore été
+recalibrée contre des parties humaines réelles.
+
 Non implémenté côté règles :
 
-- **Clairière** — la pioche se fait uniquement depuis le deck (pioche
-  aveugle), pas de rangée de cartes visibles à choisir, donc pas de vidage à
-  10 cartes non plus.
 - **Bonus de paiement par couleur** pour les cartes qui n'ont pas encore été
   câblées, et **moteurs de pioche des champignons** restants.
-- **Paiement comme décision de l'arbre** — aujourd'hui une heuristique
-  (`choose_payment`), pas un nœud de recherche. C'est le plus gros trou de
-  modélisation restant pour la qualité de jeu.
+- **Paiement, et choix de la carte de Clairière à prendre, comme décisions de
+  l'arbre** — aujourd'hui des heuristiques (`choose_payment`,
+  `choose_draw_source`), pas des nœuds de recherche. C'est le plus gros trou
+  de modélisation restant pour la qualité de jeu.
 - **Choix de la moitié sacrifiée** — jouer une moitié de carte perd l'autre ;
   décision réelle actuellement prise par « la première qui correspond ».
 - **Parallélisation racine** (multiprocessing) — facteur proche du nombre de
