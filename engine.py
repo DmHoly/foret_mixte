@@ -169,6 +169,7 @@ DRAW_FIXED = {
     D_BEECH_MARTEN: 1,   # Fouine
     D_POND_TURTLE: 1,    # Tortue cistude
     D_TREE_FERNS: 1,     # Fougère arborescente
+    D_TAWNY_OWL: 1,      # Chouette hulotte : pioche de base, inconditionnelle
 }
 
 DRAW_IF_BONUS = {
@@ -178,6 +179,7 @@ DRAW_IF_BONUS = {
     D_BROWN_BEAR: 1,     # Ours brun (nombre non confirmé par Mehdi, "?" dans
                           # cartes_effets.md ; 1 par défaut, cohérent avec le
                           # reste de cette table)
+    D_TAWNY_OWL: 2,      # Chouette hulotte : 2 cartes DE PLUS si bonus jumelles payé
 }
 
 DRAW_PER_COUNT = {
@@ -223,6 +225,7 @@ DWELLER_PLAY_FREE_IF_BONUS = {
     D_STAG_BEETLE: (FILTER_TYPE, TY_BIRD, 1),                # Lucane
     D_RED_DEER: (FILTER_DWELLER, DWELLER_ID["RED_DEER"], 1),  # Cerf élaphe
     DWELLER_ID["GNAT"]: (FILTER_TYPE, TY_BAT, None),          # Moustique
+    D_SALAMANDER: (FILTER_ANY_ANIMAL, None, 1),              # Salamandre tachetée
 }
 TREE_PLAY_FREE_IF_BONUS = {
     T_SILVER_FIR: (FILTER_ANY_ANIMAL, None, 1),  # Sapin blanc
@@ -721,6 +724,10 @@ class Forest:
             score += 10 * dc[D_WOODPECKER]
 
         # --- Habitants dépendant de la position ---
+        # fully_occupied = nombre d'ARBRES dont les 4 côtés (Top/Bottom/
+        # Left/Right) sont occupés, pas un booléen "toute la forêt l'est"
+        # (confirmé par Mehdi : la Fouine marque 5 pts par arbre entièrement
+        # occupé, donc 5 × Fouines × arbres entièrement occupés).
         score += 5 * dc[D_BEECH_MARTEN] * self.fully_occupied
         score += 2 * dc[D_WOOD_ANT] * self.bottom_total
         score += 5 * self.chaffinch_on_beech

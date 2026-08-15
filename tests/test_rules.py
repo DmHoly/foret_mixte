@@ -823,3 +823,85 @@ def test_douglas_fir_replay_only_if_bonus():
     g2.apply(("tree", fir))
     assert g2.last_bonus_paid
     assert g2.current == 0, "avec bonus, le Sapin Douglas doit faire rejouer le même joueur"
+
+
+def test_tawny_owl_draw_and_bonus():
+    """Confirmé par Mehdi : la Chouette hulotte pioche 1 carte de base
+    (inconditionnel), et 2 cartes DE PLUS si payée avec le bonus jumelles."""
+    import game as G
+
+    did = E.DWELLER_ID["TAWNY_OWL"]
+    pos = list(E.VALID_POS[did])[0]
+    symbol = E.VARIANTS[did][0][0]
+    card = (G.DWELLER, (did, symbol, pos), (did, symbol, pos))
+    filler_tree = (G.TREE, E.TREE_ID["OAK"], None)
+    cost = E.DWELLER_COST[did]
+
+    # -- sans bonus (paiement en Arbres, aucun symbole) ---------------------
+    g = G.Game(n_players=2, seed=1)
+    g.players[0].hand = [card] + [filler_tree] * cost
+    g.players[0].forest.add_tree(symbol)
+    g.deck = [filler_tree] * 10
+    g.current = 0
+    hand_before = len(g.players[0].hand)
+    g.apply(("dweller", did, 0, pos))
+    assert not g.last_bonus_paid
+    # -1 jouée, -cost paiement, +1 pioche de base
+    assert len(g.players[0].hand) == hand_before - 1 - cost + 1
+
+    # -- avec bonus (paiement incluant une carte de symbole Chouette) ------
+    g2 = G.Game(n_players=2, seed=2)
+    wood_ant = E.DWELLER_ID["WOOD_ANT"]
+    bonus_payer = (G.DWELLER, (wood_ant, symbol, list(E.VALID_POS[wood_ant])[0]),
+                   (wood_ant, symbol, list(E.VALID_POS[wood_ant])[0]))
+    g2.players[0].hand = [card, bonus_payer] + [filler_tree] * max(0, cost - 1)
+    g2.players[0].forest.add_tree(symbol)
+    g2.deck = [filler_tree] * 10
+    g2.current = 0
+    hand_before2 = len(g2.players[0].hand)
+    g2.apply(("dweller", did, 0, pos))
+    assert g2.last_bonus_paid
+    # -1 jouée, -cost paiement, +1 pioche de base, +2 pioche bonus
+    assert len(g2.players[0].hand) == hand_before2 - 1 - cost + 1 + 2
+
+
+def test_fire_salamander_play_free_if_bonus():
+    """Confirmé par Mehdi : la Salamandre tachetée, si payée avec le bonus
+    jumelles, joue un animal gratuitement depuis la main (1 usage)."""
+    import game as G
+
+    g = G.Game(n_players=2, seed=7)
+    filler_tree = (G.TREE, E.TREE_ID["OAK"], None)
+    salamander = E.DWELLER_ID["FIRE_SALAMANDER"]
+    pos = list(E.VALID_POS[salamander])[0]
+    symbol = E.VARIANTS[salamander][0][0]
+    card = (G.DWELLER, (salamander, symbol, pos), (salamander, symbol, pos))
+    wood_ant = E.DWELLER_ID["WOOD_ANT"]
+    bonus_payer = (G.DWELLER, (wood_ant, symbol, list(E.VALID_POS[wood_ant])[0]),
+                   (wood_ant, symbol, list(E.VALID_POS[wood_ant])[0]))
+    free_animal_did = E.DWELLER_ID["RED_FOX"]
+    free_pos = next(p for p in E.VALID_POS[free_animal_did] if p != pos)
+    other_symbol = E.TREE_ID["BEECH"] if symbol != E.TREE_ID["BEECH"] else E.TREE_ID["OAK"]
+    free_card = (G.DWELLER, (free_animal_did, other_symbol, free_pos),
+                 (free_animal_did, other_symbol, free_pos))
+
+    player = g.players[0]
+    player.forest.add_tree(symbol)
+    cost = E.DWELLER_COST[salamander]
+    player.hand = [card, bonus_payer, free_card] + [filler_tree] * max(0, cost - 1)
+    g.current = 0
+
+    g.apply(("dweller", salamander, 0, pos))
+    assert g.last_bonus_paid
+    assert g.pending_effect is not None, "le bonus doit ouvrir un effet en attente"
+
+    actions = g.legal_actions()
+    free_actions = [a for a in actions if a[0] == "free_dweller"]
+    assert any(a[1] == free_animal_did for a in free_actions), \
+        "le renard (animal) doit être proposable gratuitement"
+
+    n_before = len(player.hand)
+    g.apply(("free_dweller", free_animal_did, 0, free_pos))
+    assert g.pending_effect is None, "un seul usage -> effet clos après la pose"
+    assert len(player.hand) == n_before - 1
+    assert player.forest.dweller_count[free_animal_did] == 1
