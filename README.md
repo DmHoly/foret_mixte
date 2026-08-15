@@ -125,15 +125,22 @@ Une partie complète à 2 joueurs, politique gloutonne : **2,7 ms**.
 | | score moyen | maximum |
 |---|---|---|
 | greedy, 2 joueurs, **sans Clairière** (avant implémentation) | 212 | 277 |
+| greedy, 2 joueurs, **avec Clairière** | 650-670 | ~980 |
 | bon joueur humain, 2 joueurs (BGA) | 250-320 | |
 
-Les parties duraient ~140 tours au total (70 par joueur) dans cette
-configuration. **Chiffres à re-mesurer et remplacer** depuis l'implémentation
-de la Clairière (voir section suivante) : elle fait passer greedy à un score
-moyen de ~670 (jusqu'à 912) sur ~270 tours dans les mêmes conditions — un
-saut qui dépasse largement le record humain cité ci-dessus, à traiter comme
-suspect tant qu'il n'a pas été confronté à des parties BGA réelles avec
-Clairière, plutôt que comme une calibration validée.
+Les parties duraient ~140 tours au total (70 par joueur) sans Clairière,
+~265 avec. L'écart avec le score humain n'est **pas un bug** : vérifié par
+instrumentation (conservation exacte des 158 cartes, aucune duplication) et
+attribué à une cause précise — `choose_draw_source` (la carte prise dans la
+Clairière à chaque pioche) prend systématiquement la moins chère dès que la
+Clairière n'est pas vide, ce qui la vide plus vite qu'elle ne se remplit :
+sur une partie complète instrumentée, le vidage à 10 cartes (qui borne
+mécaniquement la longueur d'une partie humaine, cf. « Planter un Arbre »
+ci-dessous) ne se déclenche **jamais**. C'est un choix de bot délibérément
+plus optimal qu'un joueur humain moyen sur ce point précis (aucun humain ne
+recalcule ce choix carte par carte à 265 reprises), assumé pour l'instant
+plutôt que bridé artificiellement — à garder en tête en comparant `bench.py`
+à des parties BGA réelles.
 
 ## Politiques de décision
 
@@ -263,16 +270,18 @@ paiement rejoignent `Game.clearing` (zone commune face visible), vidée
 au-delà de 10 cartes (cartes perdues, pas remélangées). À chaque pioche du
 jeu — tour normal ou effet de carte — le joueur peut prendre une carte
 connue de la Clairière plutôt que piocher à l'aveugle dans le deck
-(`Game._draw_one`). L'Ours brun (`CLEARING_TO_CAVE_DWELLERS` dans
-`engine.py`) vide inconditionnellement la Clairière dans sa Grotte à la
-pose ; si payé avec le bonus jumelles, il pioche 1 carte de plus et rejoue
-un tour (comme le Loup). QUELLE carte prendre dans la Clairière reste une
-heuristique (`choose_draw_source`, prend la moins chère), pas une décision
-de l'arbre — l'exposer multiplierait le facteur de branchement sur l'action
-la plus fréquente de la partie. Voir la mise en garde sur le score moyen
-dans la [calibration des scores](#calibration-des-scores) : cette
-implémentation change fortement la dynamique de jeu et n'a pas encore été
-recalibrée contre des parties humaines réelles.
+(`Game._draw_one`). **Planter un Arbre alimente aussi la Clairière depuis le
+deck** (`_plant_tree_feeds_clearing`), en plus des cartes de paiement : c'est
+cette règle qui vide le deck et remplit la Clairière assez vite pour borner
+la longueur d'une partie humaine — sous un bot glouton qui vide la Clairière
+plus vite qu'elle ne se remplit, ce frein ne s'enclenche quasiment jamais
+(voir [calibration des scores](#calibration-des-scores)). L'Ours brun
+(`CLEARING_TO_CAVE_DWELLERS` dans `engine.py`) vide inconditionnellement la
+Clairière dans sa Grotte à la pose ; si payé avec le bonus jumelles, il
+pioche 1 carte de plus et rejoue un tour (comme le Loup). QUELLE carte
+prendre dans la Clairière reste une heuristique (`choose_draw_source`, prend
+la moins chère), pas une décision de l'arbre — l'exposer multiplierait le
+facteur de branchement sur l'action la plus fréquente de la partie.
 
 Non implémenté côté règles :
 

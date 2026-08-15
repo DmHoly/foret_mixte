@@ -687,3 +687,56 @@ def test_brown_bear_bonus_draws_and_replays():
     # -1 carte jouée, -cost défaussées en paiement, +1 pioche bonus
     assert len(player.hand) == hand_before - 1 - cost + 1
     assert g.current == 0, "l'Ours brun doit faire rejouer le même joueur si le bonus est payé"
+
+
+def test_plant_tree_feeds_clearing_from_deck():
+    """Confirmé par Mehdi : planter un Arbre alimente aussi la Clairière
+    depuis le DECK, en plus des cartes de paiement -- c'est cette règle qui
+    vide le deck et remplit la Clairière assez vite pour borner la longueur
+    d'une partie."""
+    import game as G
+
+    g = G.Game(n_players=2, seed=1)
+    oak = E.TREE_ID["OAK"]
+    filler = (G.TREE, E.TREE_ID["BIRCH"], None)
+    tree_card = (G.TREE, oak, None)
+    cost = E.TREE_COST[oak]
+    player = g.players[0]
+    player.hand = [tree_card] + [filler] * cost
+    known_deck_card = (G.TREE, E.TREE_ID["BEECH"], None)
+    g.deck = [filler] * 5 + [known_deck_card]  # pioché par pop(), donc la fin = prochaine carte
+    g.current = 0
+    deck_before = len(g.deck)
+    clearing_before = len(g.clearing)
+
+    g.apply(("tree", oak))
+
+    assert len(g.deck) == deck_before - 1, \
+        "planter un Arbre doit retirer une carte du deck en plus du paiement"
+    assert g.clearing[-1] == known_deck_card, \
+        "la carte retirée du deck doit atterrir dans la Clairière"
+    assert len(g.clearing) == clearing_before + cost + 1  # paiement + carte du deck
+
+
+def test_plant_tree_feeds_clearing_reveals_winter():
+    """Une carte Hiver révélée en alimentant la Clairière (plantation d'un
+    Arbre) compte comme rencontrée, comme une pioche aveugle, et ne rejoint
+    pas la Clairière."""
+    import game as G
+
+    g = G.Game(n_players=2, seed=1)
+    oak = E.TREE_ID["OAK"]
+    filler = (G.TREE, E.TREE_ID["BIRCH"], None)
+    tree_card = (G.TREE, oak, None)
+    cost = E.TREE_COST[oak]
+    player = g.players[0]
+    player.hand = [tree_card] + [filler] * cost
+    g.deck = [filler] * 5 + [(G.WINTER, None, None)]
+    g.current = 0
+    clearing_before = len(g.clearing)
+    winters_before = g.winters_seen
+
+    g.apply(("tree", oak))
+
+    assert g.winters_seen == winters_before + 1
+    assert len(g.clearing) == clearing_before + cost, "la carte Hiver ne rejoint pas la Clairière"

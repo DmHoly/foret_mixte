@@ -28,6 +28,15 @@ bénéficient automatiquement ; QUELLE carte prendre reste une heuristique
 multiplierait le facteur de branchement sur l'action la plus fréquente de la
 partie, comme `choose_payment` déjà simplifié pour la même raison.
 
+Planter un Arbre alimente AUSSI la Clairière depuis le deck (confirmé par
+Mehdi, `_plant_tree_feeds_clearing`) : une carte du dessus du deck y est
+placée en plus des cartes de paiement. C'est cette règle, pas juste le choix
+de pioche ci-dessus, qui vide le deck et remplit la Clairière assez vite pour
+borner la longueur d'une partie — sans elle, un joueur qui pioche toujours
+dans une Clairière jamais vidée n'épuise quasiment plus le deck, ce qui
+allonge les parties très au-delà des scores humains de référence (constaté
+empiriquement avant d'ajouter cette règle).
+
 Grotte : alimentée par l'effet du Raton laveur (CAVE_CHOICE_DWELLERS dans
 engine.py, décision réelle) et par celui de l'Ours brun (CLEARING_TO_CAVE_
 DWELLERS, inconditionnel : vide toute la Clairière dans sa Grotte). Il n'y a
@@ -239,6 +248,27 @@ class Game:
         if len(self.clearing) >= 10:
             self.clearing.clear()
 
+    def _plant_tree_feeds_clearing(self):
+        """Planter un Arbre alimente aussi la Clairière depuis le DECK
+        (confirmé par Mehdi), en plus des éventuelles cartes de paiement :
+        c'est ce qui vide le deck et remplit la Clairière assez vite pour
+        borner la longueur d'une partie (sans cette règle, la Clairière ne
+        se videait quasiment jamais, ce qui allongeait les parties très
+        au-delà des scores humains observés). Une carte Hiver révélée ainsi
+        compte comme rencontrée, exactement comme une pioche aveugle, et ne
+        rejoint pas la Clairière.
+        """
+        if not self.deck:
+            self.over = True
+            return
+        card = self.deck.pop()
+        if card[0] == WINTER:
+            self.winters_seen += 1
+            if self.winters_seen >= 3:
+                self.over = True
+            return
+        self._add_to_clearing(card)
+
     # -- actions -----------------------------------------------------------
 
     def legal_actions(self):
@@ -428,6 +458,7 @@ class Game:
             if action[0] == "tree":
                 tree_id = action[1]
                 player.forest.add_tree(tree_id)
+                self._plant_tree_feeds_clearing()
                 for _ in range(TREE_DRAW_FIXED.get(tree_id, 0)):
                     self._draw_one(player)
                 if tree_id in TREE_REPLAY_ALWAYS:
@@ -499,6 +530,7 @@ class Game:
                 self._add_to_clearing(player.hand.pop(j))
             if action[0] == "tree":
                 player.forest.add_tree(action[1])
+                self._plant_tree_feeds_clearing()
             else:
                 _, did, tree_idx, pos = action
                 player.forest.add_dweller(tree_idx, pos, did, symbol)
