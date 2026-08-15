@@ -194,9 +194,16 @@ REPLAY_IF_BONUS = frozenset({D_WOLF, D_BROWN_BEAR})  # bonus jumelles payé
 
 TREE_DRAW_FIXED = {
     T_BIRCH: 1,  # Bouleau : effet de pose, pioche 1 carte en plus du score
+    T_BEECH: 1,  # Hêtre : effet de pose inconditionnel, pioche 1 carte (confirmé par Mehdi)
 }
 
-TREE_REPLAY_ALWAYS = frozenset({T_DOUGLAS_FIR})  # Sapin Douglas, inconditionnel
+# Confirmé par Mehdi : un Arbre PEUT avoir un bonus jumelles (payé avec une
+# carte de son propre symbole), contrairement à l'hypothèse précédente
+# ("pas de bonus jumelles pour un arbre", cf. cartes_effets.md avant
+# correction). Sapin Douglas et Chêne rejouent un tour SI payés avec le
+# bonus ; aucun arbre ne rejoue un tour inconditionnellement.
+TREE_REPLAY_ALWAYS = frozenset()
+TREE_REPLAY_IF_BONUS = frozenset({T_DOUGLAS_FIR, T_OAK})
 
 # -- Batch 2b : "jouer gratuitement une carte depuis la main" -------------
 # Nécessite un sous-choix (Game.pending_effect, voir game.py). Confirmé par

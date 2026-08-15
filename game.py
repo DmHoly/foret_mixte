@@ -60,7 +60,7 @@ from engine import (
     MUSHROOM_TRIGGER_POSITION, N_DWELLERS, PLAY_CHAIN_DWELLERS, POS_ID,
     REPLAY_ALWAYS, REPLAY_IF_BONUS, SHARE_MAX, TREE_COPIES, TREE_COST,
     TREE_DRAW_FIXED, TREE_NAME, TREE_PLAY_FREE_IF_BONUS, TREE_REPLAY_ALWAYS,
-    VARIANTS, Forest, score_players,
+    TREE_REPLAY_IF_BONUS, VARIANTS, Forest, score_players,
 )
 
 TREE, DWELLER, WINTER = 0, 1, 2
@@ -462,6 +462,8 @@ class Game:
                 for _ in range(TREE_DRAW_FIXED.get(tree_id, 0)):
                     self._draw_one(player)
                 if tree_id in TREE_REPLAY_ALWAYS:
+                    replay = True
+                elif self.last_bonus_paid and tree_id in TREE_REPLAY_IF_BONUS:
                     replay = True
                 if self.last_bonus_paid and tree_id in TREE_PLAY_FREE_IF_BONUS:
                     filter_kind, filter_arg, remaining = TREE_PLAY_FREE_IF_BONUS[tree_id]

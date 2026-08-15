@@ -28,7 +28,9 @@ Ours brun | 3 | Placez toutes les cartes de la Clairière dans votre Grotte (inc
 Blaireau européen | ? | SI payé avec bonus jumelles : joue gratuitement un animal depuis la main | oui | ? [MANQUE, remplace la version précédente "Plantigrade/digitigrade"]
 Fougère arborescente | ? | pioche 1 carte (sans condition ?) | - | ? [FAIT (rattrapé, oublié dans le batch initial)]
 Lucane | ? | SI payé avec bonus jumelles (dépend de la couleur/symbole sur la carte) : joue gratuitement un oiseau depuis la main | oui | ? [FAIT]
-Sapin Douglas (arbre) | 2 | effet de pose (inconditionnel, pas de bonus jumelles pour un arbre) : rejoue un tour | non | 5 pts × Sapin Douglas [MANQUE l'effet, score déjà FAIT (engine.py, T_DOUGLAS_FIR)]
+Sapin Douglas (arbre) | 2 | SI payé avec bonus jumelles (carte de symbole Sapin Douglas) : rejoue un tour | oui | 5 pts × Sapin Douglas [FAIT — TREE_REPLAY_IF_BONUS, corrige une hypothèse antérieure fausse ("pas de bonus jumelles pour un arbre" ; un Arbre PEUT en avoir, confirmé par Mehdi)]
+Chêne (arbre) | 2 | SI payé avec bonus jumelles (carte de symbole Chêne) : rejoue un tour | oui | 10 pts × Chêne si ≥8 espèces d'arbres en forêt, sinon 0 [FAIT — TREE_REPLAY_IF_BONUS, score déjà FAIT]
+Hêtre (arbre) | 1 | pioche 1 carte, inconditionnel | non | 5 pts × Hêtre si ≥4 Hêtres en forêt, sinon 0 [FAIT — TREE_DRAW_FIXED, score déjà FAIT]
 Salamandre tachetée | ? | SI payé avec bonus jumelles : pose une carte (gratuitement ?) | oui | set 5/15/25 [MANQUE l'effet, score déjà dans le fichier]
 
 Geai des chênes (EURASIAN_JAY) | ? | rejoue un tour complet (inconditionnel) | non | ? [FAIT]

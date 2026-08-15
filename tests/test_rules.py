@@ -740,3 +740,86 @@ def test_plant_tree_feeds_clearing_reveals_winter():
 
     assert g.winters_seen == winters_before + 1
     assert len(g.clearing) == clearing_before + cost, "la carte Hiver ne rejoint pas la Clairière"
+
+
+def test_beech_draws_on_plant():
+    """Confirmé par Mehdi : planter un Hêtre pioche 1 carte, inconditionnel
+    (comme le Bouleau)."""
+    import game as G
+
+    g = G.Game(n_players=2, seed=1)
+    beech = E.TREE_ID["BEECH"]
+    filler = (G.TREE, E.TREE_ID["OAK"], None)
+    tree_card = (G.TREE, beech, None)
+    cost = E.TREE_COST[beech]
+    player = g.players[0]
+    player.hand = [tree_card] + [filler] * cost
+    g.deck = [filler] * 10
+    g.current = 0
+    hand_before = len(player.hand)
+
+    g.apply(("tree", beech))
+
+    # -1 carte jouée, -cost défaussées en paiement, +1 pioche fixe
+    assert len(player.hand) == hand_before - 1 - cost + 1
+
+
+def test_oak_replay_only_if_bonus():
+    """Confirmé par Mehdi : le Chêne rejoue un tour SEULEMENT s'il est payé
+    avec le bonus jumelles (carte de symbole Chêne) -- pas inconditionnel."""
+    import game as G
+
+    oak = E.TREE_ID["OAK"]
+    filler = (G.TREE, E.TREE_ID["BIRCH"], None)
+    tree_card = (G.TREE, oak, None)
+    cost = E.TREE_COST[oak]
+
+    g = G.Game(n_players=2, seed=1)
+    g.players[0].hand = [tree_card] + [filler] * cost
+    g.deck = [filler] * 10
+    g.current = 0
+    g.apply(("tree", oak))
+    assert not g.last_bonus_paid
+    assert g.current == 1, "sans bonus, le Chêne ne doit pas faire rejouer"
+
+    g2 = G.Game(n_players=2, seed=2)
+    wood_ant = E.DWELLER_ID["WOOD_ANT"]
+    bonus_payer = (G.DWELLER, (wood_ant, oak, list(E.VALID_POS[wood_ant])[0]),
+                   (wood_ant, oak, list(E.VALID_POS[wood_ant])[0]))
+    g2.players[0].hand = [tree_card, bonus_payer] + [filler] * max(0, cost - 1)
+    g2.deck = [filler] * 10
+    g2.current = 0
+    g2.apply(("tree", oak))
+    assert g2.last_bonus_paid
+    assert g2.current == 0, "avec bonus, le Chêne doit faire rejouer le même joueur"
+
+
+def test_douglas_fir_replay_only_if_bonus():
+    """Confirmé par Mehdi : le Sapin Douglas rejoue un tour SEULEMENT s'il
+    est payé avec le bonus jumelles -- pas inconditionnel. Corrige une
+    hypothèse antérieure ("pas de bonus jumelles pour un Arbre")."""
+    import game as G
+
+    fir = E.TREE_ID["DOUGLAS_FIR"]
+    filler = (G.TREE, E.TREE_ID["BIRCH"], None)
+    tree_card = (G.TREE, fir, None)
+    cost = E.TREE_COST[fir]
+
+    g = G.Game(n_players=2, seed=1)
+    g.players[0].hand = [tree_card] + [filler] * cost
+    g.deck = [filler] * 10
+    g.current = 0
+    g.apply(("tree", fir))
+    assert not g.last_bonus_paid
+    assert g.current == 1, "sans bonus, le Sapin Douglas ne doit pas faire rejouer"
+
+    g2 = G.Game(n_players=2, seed=2)
+    wood_ant = E.DWELLER_ID["WOOD_ANT"]
+    bonus_payer = (G.DWELLER, (wood_ant, fir, list(E.VALID_POS[wood_ant])[0]),
+                   (wood_ant, fir, list(E.VALID_POS[wood_ant])[0]))
+    g2.players[0].hand = [tree_card, bonus_payer] + [filler] * max(0, cost - 1)
+    g2.deck = [filler] * 10
+    g2.current = 0
+    g2.apply(("tree", fir))
+    assert g2.last_bonus_paid
+    assert g2.current == 0, "avec bonus, le Sapin Douglas doit faire rejouer le même joueur"
