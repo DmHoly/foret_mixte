@@ -20,8 +20,17 @@ Colonnes, dans l'ordre (voir FEATURE_NAMES pour l'introspection) :
     (proxy du "potentiel de combo différé")
   - has_unlimited_stacker_in_hand (1) : 1 si une carte à SHARE_MAX=-1
     (ex. Lièvre d'Europe) est en main
+  - clearing_size (1) : nombre de cartes dans la Clairière (`Game.clearing`,
+    partagée entre joueurs). Absente jusqu'ici alors que la Clairière est
+    devenue le principal moteur d'inflation du score (voir README,
+    "Calibration des scores") -- un modèle qui l'ignore ne peut pas
+    distinguer un état où la prochaine pioche est connue et bon marché
+    d'un état où elle est aveugle.
+  - clearing_min_cost (1) : coût le plus bas parmi les cartes de la
+    Clairière (0 si vide), même heuristique que `choose_draw_source` --
+    proxy direct de "combien vaut la pioche garantie de ce tour".
 
-Total = 8 + 49 + 10 + 1 + 4 + 1 + 1 + 1 = 75 colonnes.
+Total = 8 + 49 + 10 + 1 + 4 + 1 + 1 + 1 + 1 + 1 = 77 colonnes.
 
 Volontairement PAS de features d'avancement de partie (score actuel,
 tours écoulés, cartes restantes dans le deck), ET volontairement des
@@ -63,6 +72,7 @@ FEATURE_NAMES = (
     + ["cave"]
     + [f"mushroom_{E.DWELLER_NAME[d]}" for d in MUSHROOM_DIDS]
     + ["hand_size", "n_bonus_symbols_in_hand", "has_unlimited_stacker"]
+    + ["clearing_size", "clearing_min_cost"]
 )
 N_FEATURES = len(FEATURE_NAMES)
 
@@ -117,6 +127,10 @@ def extract_features(game, player_index):
     feats.append(float(len(hand)))
     feats.append(float(n_bonus_symbols))
     feats.append(has_stacker)
+
+    clearing = game.clearing
+    feats.append(float(len(clearing)))
+    feats.append(float(min((G.card_min_cost(c) for c in clearing), default=0)))
 
     assert len(feats) == N_FEATURES, (len(feats), N_FEATURES)
     return feats
