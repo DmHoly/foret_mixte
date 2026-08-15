@@ -511,7 +511,11 @@ class Forest:
                 side = 0 if pos == LEFT else 1
                 self.bats_by_side[tree_idx][side] += 1
                 if self.bats_by_side[tree_idx][side] == 1:
-                    # active les loirs déjà posés en face
+                    # Loir gris (confirmé par Mehdi) : marque 15 pts s'il y a
+                    # une Chauve-souris sur ce même arbre. Left/Right n'étant
+                    # pas des slots partagés pour ces deux espèces, "sur cet
+                    # arbre" équivaut exactement à "sur le côté opposé" -- les
+                    # deux ne peuvent physiquement pas occuper le même côté.
                     self.dormouse_hits += self.dormice_by_side[tree_idx][1 - side]
         elif dweller_id == D_FAT_DORMOUSE:
             side = 0 if pos == LEFT else 1
