@@ -293,7 +293,16 @@ joueur humain plutôt que pour lire du code :
   terme, pas seulement lequel.
 
 Les deux pages s'ouvrent directement dans un navigateur (aucun serveur
-requis) et se renvoient l'une à l'autre par un lien en haut de page.
+requis, aucune dépendance) et se renvoient l'une à l'autre par un lien en
+haut de page. GitHub n'affiche pas de rendu pour un fichier `.html` (juste
+le code source), d'où les aperçus ci-dessous : cliquer dessus (ou sur les
+liens plus haut) ouvre la vraie page interactive, après avoir cloné ou
+téléchargé le dépôt.
+
+<a href="docs/combo_guide.html"><img src="docs/screenshots/combo_guide_preview.png" alt="Aperçu du guide des combos : classement des combos par espérance de points" width="720"></a>
+
+<a href="docs/tactical_guide.html"><img src="docs/screenshots/tactical_guide_preview.png" alt="Aperçu du guide tactique : écarts MCTS vs greedy et enseignements de jeu" width="720"></a>
+
 Générées par `reference/gen_combo_guide.py`, qui rejoue les parties,
 décompose `Forest.score()` terme par terme (vérifié égal au score réel du
 moteur à chaque forêt) et agrège les statistiques :
