@@ -81,6 +81,7 @@ for name, cap in SLOT_SHARING.items():
 # Identifiants utilisés dans les règles
 D_BEECH_MARTEN = DWELLER_ID["BEECH_MARTEN"]
 D_BLACKBERRIES = DWELLER_ID["BLACKBERRIES"]
+D_BROWN_BEAR = DWELLER_ID["BROWN_BEAR"]
 D_BULLFINCH = DWELLER_ID["BULLFINCH"]
 D_CHAFFINCH = DWELLER_ID["CHAFFINCH"]
 D_COMMON_TOAD = DWELLER_ID["COMMON_TOAD"]
@@ -168,12 +169,17 @@ DRAW_FIXED = {
     D_BEECH_MARTEN: 1,   # Fouine
     D_POND_TURTLE: 1,    # Tortue cistude
     D_TREE_FERNS: 1,     # Fougère arborescente
+    D_TAWNY_OWL: 1,      # Chouette hulotte : pioche de base, inconditionnelle
 }
 
 DRAW_IF_BONUS = {
     D_ROE_DEER: 1,       # Chevreuil
     D_FALLOW_DEER: 2,    # Daim
     D_HEDGEHOG: 1,       # Hérisson commun
+    D_BROWN_BEAR: 1,     # Ours brun (nombre non confirmé par Mehdi, "?" dans
+                          # cartes_effets.md ; 1 par défaut, cohérent avec le
+                          # reste de cette table)
+    D_TAWNY_OWL: 2,      # Chouette hulotte : 2 cartes DE PLUS si bonus jumelles payé
 }
 
 DRAW_PER_COUNT = {
@@ -182,7 +188,7 @@ DRAW_PER_COUNT = {
 }
 
 REPLAY_ALWAYS = frozenset({D_EURASIAN_JAY})  # Geai des chênes, inconditionnel
-REPLAY_IF_BONUS = frozenset({D_WOLF})        # Loup, si bonus jumelles payé
+REPLAY_IF_BONUS = frozenset({D_WOLF, D_BROWN_BEAR})  # bonus jumelles payé
 # Sapin Douglas (dweller "SI bonus : rejoue un tour") pas encore ajouté ici :
 # son dweller_id précis n'a pas été identifié dans le catalogue de Mehdi
 # (nom générique "Sapin Douglas", à confirmer contre cards.py avant d'ajouter
@@ -190,9 +196,16 @@ REPLAY_IF_BONUS = frozenset({D_WOLF})        # Loup, si bonus jumelles payé
 
 TREE_DRAW_FIXED = {
     T_BIRCH: 1,  # Bouleau : effet de pose, pioche 1 carte en plus du score
+    T_BEECH: 1,  # Hêtre : effet de pose inconditionnel, pioche 1 carte (confirmé par Mehdi)
 }
 
-TREE_REPLAY_ALWAYS = frozenset({T_DOUGLAS_FIR})  # Sapin Douglas, inconditionnel
+# Confirmé par Mehdi : un Arbre PEUT avoir un bonus jumelles (payé avec une
+# carte de son propre symbole), contrairement à l'hypothèse précédente
+# ("pas de bonus jumelles pour un arbre", cf. cartes_effets.md avant
+# correction). Sapin Douglas et Chêne rejouent un tour SI payés avec le
+# bonus ; aucun arbre ne rejoue un tour inconditionnellement.
+TREE_REPLAY_ALWAYS = frozenset()
+TREE_REPLAY_IF_BONUS = frozenset({T_DOUGLAS_FIR, T_OAK})
 
 # -- Batch 2b : "jouer gratuitement une carte depuis la main" -------------
 # Nécessite un sous-choix (Game.pending_effect, voir game.py). Confirmé par
@@ -212,6 +225,7 @@ DWELLER_PLAY_FREE_IF_BONUS = {
     D_STAG_BEETLE: (FILTER_TYPE, TY_BIRD, 1),                # Lucane
     D_RED_DEER: (FILTER_DWELLER, DWELLER_ID["RED_DEER"], 1),  # Cerf élaphe
     DWELLER_ID["GNAT"]: (FILTER_TYPE, TY_BAT, None),          # Moustique
+    D_SALAMANDER: (FILTER_ANY_ANIMAL, None, 1),              # Salamandre tachetée
 }
 TREE_PLAY_FREE_IF_BONUS = {
     T_SILVER_FIR: (FILTER_ANY_ANIMAL, None, 1),  # Sapin blanc
@@ -225,6 +239,15 @@ TREE_PLAY_FREE_IF_BONUS = {
 # heuristique cachée.
 D_RACCOON = DWELLER_ID["RACCOON"]
 CAVE_CHOICE_DWELLERS = frozenset({D_RACCOON})
+
+# Ours brun : à la pose, déplace INCONDITIONNELLEMENT toutes les cartes de
+# la Clairière (Game.clearing) dans sa Grotte (confirmé par Mehdi). Pas de
+# sous-choix (aucune carte à trier, elles y vont toutes), donc pas de
+# pending_effect dédié : résolu directement dans _resolve_dweller_effect
+# (game.py), qui a accès à self.clearing. Le tirage bonus jumelles (1 carte)
+# et le rejeu de tour bonus jumelles rentrent dans les tables génériques
+# DRAW_IF_BONUS / REPLAY_IF_BONUS ci-dessus.
+CLEARING_TO_CAVE_DWELLERS = frozenset({D_BROWN_BEAR})
 
 # Taupe (batch 2d) : "jouez immédiatement autant de cartes que souhaité en
 # payant leur coût" — chaîne d'actions de pose normales (payantes), pas de
@@ -488,7 +511,11 @@ class Forest:
                 side = 0 if pos == LEFT else 1
                 self.bats_by_side[tree_idx][side] += 1
                 if self.bats_by_side[tree_idx][side] == 1:
-                    # active les loirs déjà posés en face
+                    # Loir gris (confirmé par Mehdi) : marque 15 pts s'il y a
+                    # une Chauve-souris sur ce même arbre. Left/Right n'étant
+                    # pas des slots partagés pour ces deux espèces, "sur cet
+                    # arbre" équivaut exactement à "sur le côté opposé" -- les
+                    # deux ne peuvent physiquement pas occuper le même côté.
                     self.dormouse_hits += self.dormice_by_side[tree_idx][1 - side]
         elif dweller_id == D_FAT_DORMOUSE:
             side = 0 if pos == LEFT else 1
@@ -701,6 +728,10 @@ class Forest:
             score += 10 * dc[D_WOODPECKER]
 
         # --- Habitants dépendant de la position ---
+        # fully_occupied = nombre d'ARBRES dont les 4 côtés (Top/Bottom/
+        # Left/Right) sont occupés, pas un booléen "toute la forêt l'est"
+        # (confirmé par Mehdi : la Fouine marque 5 pts par arbre entièrement
+        # occupé, donc 5 × Fouines × arbres entièrement occupés).
         score += 5 * dc[D_BEECH_MARTEN] * self.fully_occupied
         score += 2 * dc[D_WOOD_ANT] * self.bottom_total
         score += 5 * self.chaffinch_on_beech

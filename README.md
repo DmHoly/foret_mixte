@@ -19,6 +19,7 @@ validé contre cette référence sur 1700 forêts aléatoires (`tests/test_rules
 - [Politiques de décision](#politiques-de-décision)
 - [Fonctions de valeur pour MCTS](#fonctions-de-valeur-pour-mcts)
 - [Force intrinsèque des cartes](#force-intrinsèque-des-cartes)
+- [Guides de jeu (combos et tactique)](#guides-de-jeu-combos-et-tactique)
 - [Limitations connues](#limitations-connues)
 
 ## Installation
@@ -71,6 +72,8 @@ python bench.py mcts_pairwise_hybrid 300 8 10       # MCTS (config recommandée)
 | `reference/gen_pairwise_dataset.py`, `train_pairwise_model.py` | Génère et entraîne le modèle de valeur contrastif. |
 | `reference/card_strength.py`, `card_strength_mcts.py` | Force intrinsèque des cartes par retrait contrefactuel. |
 | `reference/features.py`, `gen_value_dataset.py`, `train_value_model.py` | Modèle de valeur absolu (MLP), voir [limitations](#fonctions-de-valeur-pour-mcts). |
+| `reference/gen_combo_guide.py` | Génère `docs/combo_guide.html` et `docs/tactical_guide.html`, voir [guides de jeu](#guides-de-jeu-combos-et-tactique). |
+| `docs/combo_guide.html`, `docs/tactical_guide.html` | Guides de jeu pour un humain : combos classés par espérance, enseignements MCTS vs greedy. **Générés**, ne pas éditer à la main. |
 | `archive/` | Scripts d'itération et audit remplacés par des versions plus propres, conservés pour l'historique (voir `archive/README.md`). |
 
 ## Le moteur de scoring
@@ -124,11 +127,23 @@ Une partie complète à 2 joueurs, politique gloutonne : **2,7 ms**.
 
 | | score moyen | maximum |
 |---|---|---|
-| greedy, 2 joueurs | 212 | 277 |
+| greedy, 2 joueurs, **sans Clairière** (avant implémentation) | 212 | 277 |
+| greedy, 2 joueurs, **avec Clairière** | 650-670 | ~980 |
 | bon joueur humain, 2 joueurs (BGA) | 250-320 | |
 
-Les parties durent ~140 tours au total (70 par joueur). Le simulateur est dans
-le bon régime pour rendre les comparaisons de politiques interprétables.
+Les parties duraient ~140 tours au total (70 par joueur) sans Clairière,
+~265 avec. L'écart avec le score humain n'est **pas un bug** : vérifié par
+instrumentation (conservation exacte des 158 cartes, aucune duplication) et
+attribué à une cause précise — `choose_draw_source` (la carte prise dans la
+Clairière à chaque pioche) prend systématiquement la moins chère dès que la
+Clairière n'est pas vide, ce qui la vide plus vite qu'elle ne se remplit :
+sur une partie complète instrumentée, le vidage à 10 cartes (qui borne
+mécaniquement la longueur d'une partie humaine, cf. « Planter un Arbre »
+ci-dessous) ne se déclenche **jamais**. C'est un choix de bot délibérément
+plus optimal qu'un joueur humain moyen sur ce point précis (aucun humain ne
+recalcule ce choix carte par carte à 265 reprises), assumé pour l'instant
+plutôt que bridé artificiellement — à garder en tête en comparant `bench.py`
+à des parties BGA réelles.
 
 ## Politiques de décision
 
@@ -251,18 +266,71 @@ Constats :
   heuristiques locales ; le gain mesurable vient de la recherche
   arborescente, pas d'un greedy affiné.
 
+## Guides de jeu (combos et tactique)
+
+Deux pages HTML, générées depuis des parties simulées, pensées pour un
+joueur humain plutôt que pour lire du code :
+
+- **[docs/combo_guide.html](docs/combo_guide.html)** — classe toutes les
+  synergies du jeu (une carte × un type, une carte × elle-même, une carte ×
+  une position) par **espérance de points** : probabilité que le combo se
+  réalise dans une partie, multipliée par son gain quand il se réalise.
+  Répond à une question qu'un tableau de règles ne peut pas trancher tout
+  seul — *« ce combo a l'air fort sur le papier, mais est-ce qu'il arrive
+  souvent, et rapporte-t-il vraiment plus qu'un autre en moyenne ? »* Sert
+  de pense-bête pendant une partie (quelles cartes chercher en priorité) et
+  de garde-fou contre l'intuition : le Sycomore (score = nb d'arbres) bat
+  largement le Lièvre d'Europe (score = nb²) en espérance, alors que le
+  second a l'air plus spectaculaire sur le papier — parce que sa condition
+  (avoir des arbres) est acquise presque à coup sûr, contrairement à
+  empiler plusieurs Lièvres.
+- **[docs/tactical_guide.html](docs/tactical_guide.html)** — compare ce
+  qu'une recherche MCTS (jeu fort) privilégie par rapport à une politique
+  gloutonne (jeu naïf à un coup d'avance), et en tire des principes de jeu
+  concrets (ex. les combos liés à une ressource abondante battent les
+  combos-vedettes ; les seuils binaires ne valent pas la peine d'être
+  sur-investis). Utile pour comprendre *pourquoi* un coup gagne à long
+  terme, pas seulement lequel.
+
+Les deux pages s'ouvrent directement dans un navigateur (aucun serveur
+requis) et se renvoient l'une à l'autre par un lien en haut de page.
+Générées par `reference/gen_combo_guide.py`, qui rejoue les parties,
+décompose `Forest.score()` terme par terme (vérifié égal au score réel du
+moteur à chaque forêt) et agrège les statistiques :
+
+```bash
+python reference/gen_combo_guide.py                  # 300 parties greedy + 18 MCTS (~4 min)
+python reference/gen_combo_guide.py 50 4 100          # échantillon réduit, plus rapide
+```
+
 ## Limitations connues
+
+**Clairière et Grotte** (implémentées, `game.py`) : les cartes défaussées en
+paiement rejoignent `Game.clearing` (zone commune face visible), vidée
+au-delà de 10 cartes (cartes perdues, pas remélangées). À chaque pioche du
+jeu — tour normal ou effet de carte — le joueur peut prendre une carte
+connue de la Clairière plutôt que piocher à l'aveugle dans le deck
+(`Game._draw_one`). **Planter un Arbre alimente aussi la Clairière depuis le
+deck** (`_plant_tree_feeds_clearing`), en plus des cartes de paiement : c'est
+cette règle qui vide le deck et remplit la Clairière assez vite pour borner
+la longueur d'une partie humaine — sous un bot glouton qui vide la Clairière
+plus vite qu'elle ne se remplit, ce frein ne s'enclenche quasiment jamais
+(voir [calibration des scores](#calibration-des-scores)). L'Ours brun
+(`CLEARING_TO_CAVE_DWELLERS` dans `engine.py`) vide inconditionnellement la
+Clairière dans sa Grotte à la pose ; si payé avec le bonus jumelles, il
+pioche 1 carte de plus et rejoue un tour (comme le Loup). QUELLE carte
+prendre dans la Clairière reste une heuristique (`choose_draw_source`, prend
+la moins chère), pas une décision de l'arbre — l'exposer multiplierait le
+facteur de branchement sur l'action la plus fréquente de la partie.
 
 Non implémenté côté règles :
 
-- **Clairière** — la pioche se fait uniquement depuis le deck (pioche
-  aveugle), pas de rangée de cartes visibles à choisir, donc pas de vidage à
-  10 cartes non plus.
 - **Bonus de paiement par couleur** pour les cartes qui n'ont pas encore été
   câblées, et **moteurs de pioche des champignons** restants.
-- **Paiement comme décision de l'arbre** — aujourd'hui une heuristique
-  (`choose_payment`), pas un nœud de recherche. C'est le plus gros trou de
-  modélisation restant pour la qualité de jeu.
+- **Paiement, et choix de la carte de Clairière à prendre, comme décisions de
+  l'arbre** — aujourd'hui des heuristiques (`choose_payment`,
+  `choose_draw_source`), pas des nœuds de recherche. C'est le plus gros trou
+  de modélisation restant pour la qualité de jeu.
 - **Choix de la moitié sacrifiée** — jouer une moitié de carte perd l'autre ;
   décision réelle actuellement prise par « la première qui correspond ».
 - **Parallélisation racine** (multiprocessing) — facteur proche du nombre de

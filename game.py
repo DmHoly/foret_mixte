@@ -17,29 +17,76 @@ appariements réels des moitiés ne sont pas publiés ; ils sont ici tirés au
 hasard à chaque partie (Top avec Bottom, Left avec Right), ce qui préserve la
 bonne distribution marginale et la bonne taille de deck.
 
+Clairière (confirmé par Mehdi) : les cartes défaussées en paiement rejoignent
+`Game.clearing`, une zone commune face visible. À CHAQUE pioche du jeu — tour
+normal ou effet de carte, sans distinction — le joueur peut prendre une carte
+connue de la Clairière au lieu de piocher à l'aveugle dans le deck. Au-delà de
+10 cartes, la Clairière est vidée (cartes perdues, pas remélangées).
+`_draw_one` centralise ce choix pour que tous les points de pioche en
+bénéficient automatiquement ; QUELLE carte prendre reste une heuristique
+(`choose_draw_source`), pas une décision de l'arbre de recherche — l'exposer
+multiplierait le facteur de branchement sur l'action la plus fréquente de la
+partie, comme `choose_payment` déjà simplifié pour la même raison.
+
+Planter un Arbre alimente AUSSI la Clairière depuis le deck (confirmé par
+Mehdi, `_plant_tree_feeds_clearing`) : une carte du dessus du deck y est
+placée en plus des cartes de paiement. C'est cette règle, pas juste le choix
+de pioche ci-dessus, qui vide le deck et remplit la Clairière assez vite pour
+borner la longueur d'une partie — sans elle, un joueur qui pioche toujours
+dans une Clairière jamais vidée n'épuise quasiment plus le deck, ce qui
+allonge les parties très au-delà des scores humains de référence (constaté
+empiriquement avant d'ajouter cette règle).
+
+Grotte : alimentée par l'effet du Raton laveur (CAVE_CHOICE_DWELLERS dans
+engine.py, décision réelle) et par celui de l'Ours brun (CLEARING_TO_CAVE_
+DWELLERS, inconditionnel : vide toute la Clairière dans sa Grotte). Il n'y a
+pas de point gratuit par habitant posé.
+
+Pose payante vs pose gratuite (confirmé par Mehdi) : une carte posée en
+PAYANT son coût déclenche toujours normalement ses effets (pioche, rejeu,
+bonus jumelles), que ce soit un tour normal ou la chaîne de la Taupe (Mole) —
+c'est une action gratuite (pas de coût de TOUR), pas une pose gratuite. À
+l'inverse, une carte posée VRAIMENT gratuitement (Blaireau/Lucane/Salamandre/
+Moustique/Sapin blanc/Cerf élaphe) ne déclenche ni son effet ni son bonus.
+`_pending_stack` (exposé en lecture via la propriété `pending_effect`, qui
+retourne son sommet) est une vraie pile : une carte posée pendant la chaîne
+de la Taupe peut elle-même ouvrir un nouvel effet en attente (Raton laveur,
+une autre Taupe, un bonus de pose gratuite), qui s'empile et rend la main à
+la chaîne une fois résolu. Un rejeu de tour gagné pendant la chaîne
+(`pending_replay`) s'applique à sa fin, pas immédiatement.
+
+Taille du deck selon le nombre de joueurs (confirmé par Mehdi,
+`reduce_deck_for_player_count`) : 30 cartes retirées aléatoirement à 2
+joueurs, 20 à 3, 10 à 4, aucune à 5 (deck complet). Retrait fait sur les 158
+cartes physiques, avant la distribution des mains et avant l'insertion des
+cartes Hiver (toujours exactement 3, jamais retirées).
+
+Déclenchement de l'Hiver (confirmé par Mehdi, `insert_winter_cards`) : le
+deck restant (après réduction et distribution des mains) est découpé en 3
+tiers ; les 3 cartes Hiver vivent dans le DERNIER tiers pioché. La 1ère est
+TOUJOURS la première carte piochée en entrant dans ce tiers (position
+déterministe) ; les 2 autres sont mélangées aléatoirement dans le reste du
+tiers. La 3e carte Hiver piochée (`winters_seen >= 3`) met fin à la partie.
+
 Ce qui n'est PAS implémenté, et qui reste à faire pour un bot fiable :
-  - pioche depuis la clairière (uniquement depuis le deck ici)
-  - vidage de la clairière à 10 cartes
   - bonus de paiement par couleur (Silver Fir, Douglas Fir, Oak, Badger,
     Fire Salamander, Stag Beetle)
   - moteurs de pioche des champignons (Chanterelle, Penny Bun, Parasol,
     Fly Agaric)
-  - grotte : alimentée uniquement par l'effet du Raton laveur (voir
-    CAVE_CHOICE_DWELLERS dans engine.py), conformément au livret de règles.
-    Il n'y a pas de point gratuit par habitant posé.
 """
 
 import random
 
 from engine import (
-    CAVE_CHOICE_DWELLERS, DRAW_FIXED, DRAW_IF_BONUS, DRAW_PER_COUNT,
-    DWELLER_COST, DWELLER_NAME, DWELLER_PLAY_FREE_IF_BONUS, DWELLER_TYPE_IDS,
-    FILTER_ANY_ANIMAL, FILTER_DWELLER, FILTER_TYPE, IS_ANIMAL,
-    MUSHROOM_TRIGGER, MUSHROOM_TRIGGER_ANIMAL, MUSHROOM_TRIGGER_ANY_SYMBOL,
+    CAVE_CHOICE_DWELLERS, CLEARING_TO_CAVE_DWELLERS, DRAW_FIXED,
+    DRAW_IF_BONUS, DRAW_PER_COUNT, DWELLER_COST, DWELLER_NAME,
+    DWELLER_PLAY_FREE_IF_BONUS, DWELLER_TYPE_IDS, FILTER_ANY_ANIMAL,
+    FILTER_DWELLER, FILTER_TYPE, IS_ANIMAL, MUSHROOM_TRIGGER,
+    MUSHROOM_TRIGGER_ANIMAL, MUSHROOM_TRIGGER_ANY_SYMBOL,
     MUSHROOM_TRIGGER_POSITION, N_DWELLERS, PLAY_CHAIN_DWELLERS, POS_ID,
     REPLAY_ALWAYS, REPLAY_IF_BONUS, SHARE_MAX, TREE_COPIES, TREE_COST,
     TREE_DRAW_FIXED, TREE_NAME, TREE_PLAY_FREE_IF_BONUS, TREE_REPLAY_ALWAYS,
-    VARIANTS, Forest, score_players,
+    TREE_REPLAY_IF_BONUS, VARIANTS, Forest, score_players,
 )
 
 TREE, DWELLER, WINTER = 0, 1, 2
@@ -77,19 +124,47 @@ def build_deck(rng):
     return cards  # 158 cartes ; les cartes Hiver sont insérées par Game
 
 
-def insert_winter_cards(deck, rng, count=3):
-    """Mélange les cartes Hiver dans le dernier tiers du deck.
+DECK_REDUCTION_BY_PLAYERS = {2: 30, 3: 20, 4: 10, 5: 0}
 
-    On pioche par la fin de la liste, donc le dernier tiers pioché est le
-    début de la liste. L'insertion se fait après la distribution des mains
-    d'ouverture, ce qui est équivalent (les 6 premières cartes de chaque
-    joueur ne peuvent pas venir du dernier tiers) et évite qu'un mulligan
-    ne remette une carte Hiver en circulation.
+
+def reduce_deck_for_player_count(deck, n_players, rng):
+    """Retire aléatoirement des cartes du deck selon le nombre de joueurs
+    (confirmé par Mehdi) : 30 cartes en moins à 2 joueurs, 20 à 3, 10 à 4,
+    aucune à 5 (on joue alors avec le deck complet). Les cartes retirées
+    sortent définitivement de la partie ; ce retrait se fait AVANT la
+    distribution des mains et avant l'insertion des cartes Hiver, sur les
+    158 cartes physiques seulement (les cartes Hiver ne sont jamais
+    retirées, il y en a toujours exactement 3).
+    """
+    n = DECK_REDUCTION_BY_PLAYERS.get(n_players, 0)
+    if n <= 0:
+        return deck
+    remove = set(rng.sample(range(len(deck)), n))
+    return [c for i, c in enumerate(deck) if i not in remove]
+
+
+def insert_winter_cards(deck, rng, count=3):
+    """Découpe le deck restant (après réduction par nombre de joueurs et
+    distribution des mains) en 3 tiers ; les cartes Hiver vivent dans le
+    DERNIER tiers pioché. On pioche par la fin de la liste, donc le dernier
+    tiers pioché est le début de la liste (`deck[:third]`).
+
+    Confirmé par Mehdi : la 1ère carte Hiver est TOUJOURS la première
+    piochée en entrant dans ce tiers -- position déterministe, pas
+    aléatoire. Les `count - 1` cartes Hiver restantes sont mélangées
+    aléatoirement dans le reste du tiers. La 3e carte Hiver piochée met fin
+    à la partie (`Game._draw_one`, `Game._plant_tree_feeds_clearing`).
+
+    L'insertion se fait après la distribution des mains d'ouverture, ce qui
+    est équivalent (les 6 premières cartes de chaque joueur ne peuvent pas
+    venir du dernier tiers) et évite qu'un mulligan ne remette une carte
+    Hiver en circulation.
     """
     third = len(deck) // 3
     tail = deck[:third]
-    for _ in range(count):
+    for _ in range(count - 1):
         tail.insert(rng.randrange(len(tail) + 1), (WINTER, None, None))
+    tail.append((WINTER, None, None))  # 1ère piochée : position déterministe
     return tail + deck[third:]
 
 
@@ -108,6 +183,36 @@ def card_symbol(card, half_index):
         return None
     half = a if half_index == 0 else b
     return half[1]
+
+
+def card_min_cost(card):
+    """Coût le plus bas entre les deux moitiés jouables (un Arbre n'a qu'un
+    coût). Sert à choisir la carte la plus "flexible" dans la Clairière.
+    """
+    if card[0] == TREE:
+        return card_cost(card, 0)
+    return min(card_cost(card, 0), card_cost(card, 1))
+
+
+def choose_draw_source(clearing):
+    """Choix pioche Clairière vs pioche aveugle (deck), à CHAQUE pioche du
+    jeu (tour normal ou effet de carte, confirmé par Mehdi).
+
+    Heuristique, pas une décision de recherche : exposer ce choix à l'arbre
+    multiplierait le facteur de branchement sur l'action la plus fréquente
+    de la partie, pour un gain incertain. Une carte connue de la Clairière
+    est presque toujours au moins aussi utile qu'une carte aveugle inconnue
+    (on peut toujours la garder sans la jouer), donc on prend
+    systématiquement la moins chère de la Clairière quand elle est non
+    vide ; pioche aveugle sinon. Simplification assumée, comme
+    `choose_payment` et la sélection des cartes envoyées à la Grotte.
+
+    Retourne l'indice dans `clearing` à prendre, ou None pour piocher dans
+    le deck.
+    """
+    if not clearing:
+        return None
+    return min(range(len(clearing)), key=lambda i: card_min_cost(clearing[i]))
 
 
 class Player:
@@ -131,21 +236,36 @@ class Game:
 
     __slots__ = ("players", "deck", "clearing", "current", "winters_seen",
                  "over", "rng", "last_bonus_paid",
-                 "pending_effect")
+                 "_pending_stack", "pending_replay")
 
     def __init__(self, n_players=2, seed=None):
         self.rng = random.Random(seed)
         self.deck = build_deck(self.rng)
+        self.deck = reduce_deck_for_player_count(self.deck, n_players, self.rng)
         self.players = [Player() for _ in range(n_players)]
         self.clearing = []
         self.current = 0
         self.winters_seen = 0
         self.over = False
         self.last_bonus_paid = False
-        self.pending_effect = None
+        self._pending_stack = []
+        self.pending_replay = False
         for p in self.players:
             self._deal_opening_hand(p)
         self.deck = insert_winter_cards(self.deck, self.rng)
+
+    @property
+    def pending_effect(self):
+        """Sommet de la pile d'effets en attente (ou None). Confirmé par
+        Mehdi : une carte posée pendant la chaîne de la Taupe est payée
+        normalement, donc génère ses effets normalement -- y compris,
+        potentiellement, un NOUVEL effet en attente (Raton laveur, une autre
+        Taupe, Blaireau/Lucane/Salamandre/Sapin blanc/Cerf élaphe si bonus).
+        `_pending_stack` est une vraie pile pour supporter cette imbrication ;
+        cette propriété n'expose que le sommet, pour que legal_actions() et
+        le code externe (search.py, reference/) n'aient rien à changer.
+        """
+        return self._pending_stack[-1] if self._pending_stack else None
 
     def _deal_opening_hand(self, player):
         for _ in range(STARTING_HAND):
@@ -166,12 +286,17 @@ class Game:
         g.winters_seen = self.winters_seen
         g.over = self.over
         g.last_bonus_paid = self.last_bonus_paid
-        g.pending_effect = self.pending_effect
+        g._pending_stack = self._pending_stack[:]
+        g.pending_replay = self.pending_replay
         return g
 
     # -- pioche ------------------------------------------------------------
 
     def _draw_one(self, player):
+        idx = choose_draw_source(self.clearing)
+        if idx is not None:
+            player.hand.append(self.clearing.pop(idx))
+            return
         if not self.deck:
             self.over = True
             return
@@ -182,6 +307,37 @@ class Game:
                 self.over = True
             return
         player.hand.append(card)
+
+    def _add_to_clearing(self, card):
+        """Ajoute une carte défaussée en paiement à la Clairière (zone
+        commune face visible). Vidage à 10 confirmé par Mehdi : au-delà, les
+        cartes sont perdues (retirées définitivement de la partie), pas
+        remélangées dans le deck.
+        """
+        self.clearing.append(card)
+        if len(self.clearing) >= 10:
+            self.clearing.clear()
+
+    def _plant_tree_feeds_clearing(self):
+        """Planter un Arbre alimente aussi la Clairière depuis le DECK
+        (confirmé par Mehdi), en plus des éventuelles cartes de paiement :
+        c'est ce qui vide le deck et remplit la Clairière assez vite pour
+        borner la longueur d'une partie (sans cette règle, la Clairière ne
+        se videait quasiment jamais, ce qui allongeait les parties très
+        au-delà des scores humains observés). Une carte Hiver révélée ainsi
+        compte comme rencontrée, exactement comme une pioche aveugle, et ne
+        rejoint pas la Clairière.
+        """
+        if not self.deck:
+            self.over = True
+            return
+        card = self.deck.pop()
+        if card[0] == WINTER:
+            self.winters_seen += 1
+            if self.winters_seen >= 3:
+                self.over = True
+            return
+        self._add_to_clearing(card)
 
     # -- actions -----------------------------------------------------------
 
@@ -335,75 +491,115 @@ class Game:
     def apply(self, action, payment=None):
         player = self.players[self.current]
 
-        if self.pending_effect is not None:
+        if self._pending_stack:
             self._apply_pending(player, action)
             return self
 
-        self.last_bonus_paid = False
-        replay = False
         if action[0] == "draw":
             self._draw_one(player)
             if len(player.hand) < HAND_LIMIT and not self.over:
                 self._draw_one(player)
         else:
-            found = self._find_card(player.hand, action)
-            if found is None:
-                raise IllegalAction(f"action impossible dans cet état : {action}")
-            hand_index, half_index, symbol = found
-            card = player.hand.pop(hand_index)
-            cost = card_cost(card, half_index)
-            if action[0] == "tree":
-                # Le symbole "pertinent" pour le bonus d'un arbre est
-                # l'espèce elle-même (ex. Sapin blanc payé avec une carte
-                # de symbole Sapin blanc).
-                bonus_symbol = action[1]
-            else:
-                bonus_symbol = symbol
-            if payment is None:
-                payment = choose_payment(player.hand, cost, preferred_symbol=bonus_symbol)
-            if bonus_symbol is not None and payment:
-                self.last_bonus_paid = any(
-                    card_symbol(player.hand[j], 0) == bonus_symbol
-                    or card_symbol(player.hand[j], 1) == bonus_symbol
-                    for j in payment
-                )
-            for j in sorted(payment, reverse=True):
-                self.clearing.append(player.hand.pop(j))
-            if action[0] == "tree":
-                tree_id = action[1]
-                player.forest.add_tree(tree_id)
-                for _ in range(TREE_DRAW_FIXED.get(tree_id, 0)):
-                    self._draw_one(player)
-                if tree_id in TREE_REPLAY_ALWAYS:
-                    replay = True
-                if self.last_bonus_paid and tree_id in TREE_PLAY_FREE_IF_BONUS:
-                    filter_kind, filter_arg, remaining = TREE_PLAY_FREE_IF_BONUS[tree_id]
-                    self.pending_effect = (filter_kind, filter_arg, remaining)
-            else:
-                _, did, tree_idx, pos = action
-                player.forest.add_dweller(tree_idx, pos, did, symbol)
-                self._resolve_mushroom_triggers(player, did, pos)
-                replay = self._resolve_dweller_effect(player, did)
-                if did in CAVE_CHOICE_DWELLERS:
-                    self.pending_effect = ("cave_choice", None, None)
-                elif did in PLAY_CHAIN_DWELLERS:
-                    self.pending_effect = ("play_chain", None, None)
-                elif self.last_bonus_paid and did in DWELLER_PLAY_FREE_IF_BONUS:
-                    filter_kind, filter_arg, remaining = DWELLER_PLAY_FREE_IF_BONUS[did]
-                    self.pending_effect = (filter_kind, filter_arg, remaining)
-        if self.pending_effect is None and not replay:
-            self.current = (self.current + 1) % len(self.players)
+            self._play_card(player, action, payment)
+        self._end_action()
         return self
 
-    def _apply_pending(self, player, action):
-        """Résout une action liée à un `pending_effect` en cours (brique 2b :
-        jouer gratuitement une carte depuis la main ; brique 2c : envoyer
-        des cartes à la Grotte). Ne redéclenche volontairement pas de
-        nouvel effet en cascade sur la carte posée gratuitement, pour
-        éviter une chaîne infinie ; c'est une simplification assumée,
-        comme le choix de paiement.
+    def _end_action(self):
+        """Décide si le tour passe au joueur suivant, après résolution (ou
+        fermeture) d'un effet. Ne fait rien tant qu'il reste un effet sur la
+        pile (`_pending_stack`) -- la main revient alors au niveau en
+        dessous (ex. la chaîne de la Taupe, après la résolution d'un Raton
+        laveur posé pendant la chaîne). Une fois la pile vide, un rejeu de
+        tour accumulé pendant l'action (Geai des chênes, Loup/Sapin Douglas/
+        Chêne si bonus) est consommé avant de faire passer le tour --
+        confirmé par Mehdi : un rejeu gagné PENDANT la chaîne de la Taupe
+        s'ajoute à la fin, il ne se perd pas juste parce que la chaîne
+        continuait au moment où il a été gagné.
         """
-        if self.pending_effect[0] == "cave_choice":
+        if self._pending_stack:
+            return
+        if self.pending_replay:
+            self.pending_replay = False
+            return
+        self.current = (self.current + 1) % len(self.players)
+
+    def _play_card(self, player, action, payment=None):
+        """Pose payante d'une carte (arbre ou habitant) : paiement, ajout en
+        forêt, effets de pose. Partagé entre le tour normal (`apply`) et la
+        chaîne de la Taupe (`_apply_pending`, "play_chain") : confirmé par
+        Mehdi, une carte posée en payant son coût déclenche normalement ses
+        effets (pioche, rejeu, bonus jumelles...), chaîne ou pas -- c'est une
+        action gratuite (pas de coût de TOUR), pas une pose gratuite. À
+        l'inverse, une vraie pose gratuite (Blaireau/Lucane/Salamandre/
+        Moustique/Sapin blanc/Cerf élaphe, voir `_apply_pending` ci-dessous,
+        cas "free_dweller") ne déclenche ni son effet ni son bonus, câblée
+        séparément et volontairement plus simple.
+        """
+        found = self._find_card(player.hand, action)
+        if found is None:
+            raise IllegalAction(f"action impossible dans cet état : {action}")
+        hand_index, half_index, symbol = found
+        card = player.hand.pop(hand_index)
+        cost = card_cost(card, half_index)
+        if action[0] == "tree":
+            # Le symbole "pertinent" pour le bonus d'un arbre est l'espèce
+            # elle-même (ex. Sapin blanc payé avec une carte de symbole
+            # Sapin blanc).
+            bonus_symbol = action[1]
+        else:
+            bonus_symbol = symbol
+        if payment is None:
+            payment = choose_payment(player.hand, cost, preferred_symbol=bonus_symbol)
+        self.last_bonus_paid = False
+        if bonus_symbol is not None and payment:
+            self.last_bonus_paid = any(
+                card_symbol(player.hand[j], 0) == bonus_symbol
+                or card_symbol(player.hand[j], 1) == bonus_symbol
+                for j in payment
+            )
+        for j in sorted(payment, reverse=True):
+            self._add_to_clearing(player.hand.pop(j))
+
+        replay = False
+        if action[0] == "tree":
+            tree_id = action[1]
+            player.forest.add_tree(tree_id)
+            self._plant_tree_feeds_clearing()
+            for _ in range(TREE_DRAW_FIXED.get(tree_id, 0)):
+                self._draw_one(player)
+            if tree_id in TREE_REPLAY_ALWAYS:
+                replay = True
+            elif self.last_bonus_paid and tree_id in TREE_REPLAY_IF_BONUS:
+                replay = True
+            if self.last_bonus_paid and tree_id in TREE_PLAY_FREE_IF_BONUS:
+                filter_kind, filter_arg, remaining = TREE_PLAY_FREE_IF_BONUS[tree_id]
+                self._pending_stack.append((filter_kind, filter_arg, remaining))
+        else:
+            _, did, tree_idx, pos = action
+            player.forest.add_dweller(tree_idx, pos, did, symbol)
+            self._resolve_mushroom_triggers(player, did, pos)
+            replay = self._resolve_dweller_effect(player, did)
+            if did in CAVE_CHOICE_DWELLERS:
+                self._pending_stack.append(("cave_choice", None, None))
+            elif did in PLAY_CHAIN_DWELLERS:
+                self._pending_stack.append(("play_chain", None, None))
+            elif self.last_bonus_paid and did in DWELLER_PLAY_FREE_IF_BONUS:
+                filter_kind, filter_arg, remaining = DWELLER_PLAY_FREE_IF_BONUS[did]
+                self._pending_stack.append((filter_kind, filter_arg, remaining))
+
+        self.pending_replay = self.pending_replay or replay
+
+    def _apply_pending(self, player, action):
+        """Résout une action liée à l'effet en tête de `_pending_stack`
+        (sommet de la pile, voir `pending_effect`). brique 2b : jouer
+        gratuitement une carte depuis la main ; brique 2c : envoyer des
+        cartes à la Grotte ; Taupe : chaîne de poses payantes, potentiellement
+        imbriquée (une carte posée pendant la chaîne peut elle-même ouvrir un
+        nouvel effet, empilé par-dessus -- voir `_play_card`).
+        """
+        kind = self.pending_effect[0]
+
+        if kind == "cave_choice":
             if action[0] != "cave_discard":
                 raise IllegalAction(f"action impossible pendant l'effet Grotte : {action}")
             n = action[1]
@@ -421,42 +617,30 @@ class Game:
             player.forest.cave += n
             for _ in range(n):
                 self._draw_one(player)
-            self.pending_effect = None
-            self.current = (self.current + 1) % len(self.players)
+            self._pending_stack.pop()
+            self._end_action()
             return
 
-        if self.pending_effect[0] == "play_chain":
+        if kind == "play_chain":
             if action[0] == "skip_effect":
-                self.pending_effect = None
-                self.current = (self.current + 1) % len(self.players)
+                self._pending_stack.pop()
+                self._end_action()
                 return
             if action[0] not in ("tree", "dweller"):
                 raise IllegalAction(f"action impossible pendant la chaîne Taupe : {action}")
-            found = self._find_card(player.hand, action)
-            if found is None:
-                raise IllegalAction(f"action impossible dans cet état : {action}")
-            hand_index, half_index, symbol = found
-            card = player.hand.pop(hand_index)
-            cost = card_cost(card, half_index)
-            payment = choose_payment(player.hand, cost)
-            for j in sorted(payment, reverse=True):
-                self.clearing.append(player.hand.pop(j))
-            if action[0] == "tree":
-                player.forest.add_tree(action[1])
-            else:
-                _, did, tree_idx, pos = action
-                player.forest.add_dweller(tree_idx, pos, did, symbol)
-                self._resolve_mushroom_triggers(player, did, pos)
-            # Simplification assumée (confirmée par Mehdi) : la carte posée
-            # pendant la chaîne ne redéclenche pas ses propres effets de
-            # pose, pour rester bornée. La chaîne continue automatiquement ;
-            # elle s'arrête d'elle-même à la prochaine légal_actions() si
-            # plus rien n'est finançable (seul skip_effect reste alors).
+            self._play_card(player, action)
+            # La chaîne elle-même reste sur la pile (elle ne se termine que
+            # par skip_effect ou l'absence de coup finançable, détectée à la
+            # prochaine legal_actions()). Si _play_card a empilé un nouvel
+            # effet (ex. Raton laveur posé pendant la chaîne), il devient le
+            # nouveau sommet et sera résolu avant de revenir à la chaîne ;
+            # _end_action() ne fait rien tant que la pile n'est pas vide.
+            self._end_action()
             return
 
         if action[0] == "skip_effect":
-            self.pending_effect = None
-            self.current = (self.current + 1) % len(self.players)
+            self._pending_stack.pop()
+            self._end_action()
             return
         if action[0] != "free_dweller":
             raise IllegalAction(f"action impossible pendant un effet en attente : {action}")
@@ -474,11 +658,11 @@ class Game:
                     player.forest.add_dweller(tree_idx, pos, did, symbol)
                     self._resolve_mushroom_triggers(player, did, pos)
                     if remaining is not None and remaining <= 1:
-                        self.pending_effect = None
-                        self.current = (self.current + 1) % len(self.players)
+                        self._pending_stack.pop()
                     else:
                         new_remaining = None if remaining is None else remaining - 1
-                        self.pending_effect = (filter_kind, filter_arg, new_remaining)
+                        self._pending_stack[-1] = (filter_kind, filter_arg, new_remaining)
+                    self._end_action()
                     return
         raise IllegalAction(f"carte introuvable pour l'effet en attente : {action}")
 
@@ -488,6 +672,11 @@ class Game:
         Voir engine.py pour les tables et reference/cartes_effets.md pour
         la source des règles.
         """
+        if did in CLEARING_TO_CAVE_DWELLERS:
+            # Ours brun : effet inconditionnel, avant le tirage/rejeu bonus
+            # jumelles éventuel (tables génériques ci-dessous).
+            player.forest.cave += len(self.clearing)
+            self.clearing.clear()
         for _ in range(DRAW_FIXED.get(did, 0)):
             self._draw_one(player)
         if self.last_bonus_paid:
