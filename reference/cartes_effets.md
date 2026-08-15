@@ -6,7 +6,7 @@ Statut moteur : [FAIT] déjà implémenté correctement | [MANQUE] pas implémen
 ## Confirmé par Mehdi (photos + description directe)
 
 Renard roux | 1 | pioche 1 carte × Lièvre d'Europe possédé | - | 2 pts × Lièvre d'Europe [MANQUE l'effet pioche, score déjà FAIT]
-Lièvre d'Europe | ? | - | 1 par Lièvre d'Europe (bonus jumelles) | N² où N=nombre de lièvres [FAIT le score et le partage de slot, MANQUE le bonus jumelles]
+Lièvre d'Europe | ? | - | non | N² où N=nombre de lièvres [FAIT — score et partage de slot. Corrigé lors de la revue : pas de "bonus jumelles" séparé, le N² EST le score de base, pas un bonus qui s'ajouterait par-dessus (confirmé par Mehdi)]
 Taupe | ? | Jouez immédiatement autant de cartes que souhaité en payant leurs coûts | - | 0 [FAIT - chaîne d'actions payantes, arrêt automatique ou skip_effect]
 Ours brun | ? | Placez toutes les cartes de la Clairière dans votre Grotte | - | 0 (les points viennent de la Grotte) [FAIT — clairière/grotte simulées (CLEARING_TO_CAVE_DWELLERS, game.py), voir aussi ligne 27]
 Raton laveur | ? | Placez autant de cartes que voulu de la main directement sur la Grotte (1 pt chacune au score, `forest.cave`), et piochez le même nombre | - | ? [FAIT]
