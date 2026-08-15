@@ -1070,3 +1070,83 @@ def test_mole_chain_defers_replay_to_end_of_chain():
     assert g.pending_effect is None
     assert g.current == 0, "le rejeu accumulé pendant la chaîne s'applique à sa fin"
     assert not g.pending_replay, "consommé"
+
+
+def test_deck_reduced_by_player_count():
+    """Confirmé par Mehdi : 30 cartes retirées à 2 joueurs, 20 à 3, 10 à 4,
+    aucune à 5 (deck complet). Vérifié via le total de cartes en circulation
+    juste après la mise en place (deck restant + mains + 3 cartes Hiver =
+    158 - retrait + 3, quel que soit le nombre de joueurs)."""
+    import game as G
+
+    expected_removed = {2: 30, 3: 20, 4: 10, 5: 0}
+    for n_players, removed in expected_removed.items():
+        g = G.Game(n_players=n_players, seed=1)
+        total = len(g.deck) + sum(len(p.hand) for p in g.players)
+        assert total == 158 - removed + 3, (n_players, total)
+
+
+def test_reduce_deck_for_player_count_direct():
+    """reduce_deck_for_player_count isolée : retire le bon nombre de cartes,
+    ne fait qu'un sous-ensemble du deck d'origine, et ne touche à rien à
+    5 joueurs."""
+    import game as G
+
+    rng = random.Random(5)
+    deck = list(range(158))
+    reduced = G.reduce_deck_for_player_count(deck, 2, rng)
+    assert len(reduced) == 158 - 30
+    assert set(reduced) <= set(deck)
+
+    rng5 = random.Random(5)
+    deck5 = list(range(158))
+    reduced5 = G.reduce_deck_for_player_count(deck5, 5, rng5)
+    assert reduced5 == deck5
+
+
+def test_first_winter_card_is_deterministic_in_last_third():
+    """Confirmé par Mehdi : le deck restant est découpé en 3 tiers, les
+    cartes Hiver vivent dans le dernier tiers pioché (le premier tiers de la
+    liste). La 1ère carte Hiver piochée dans ce tiers est TOUJOURS la
+    première (position déterministe) ; les 2 autres sont mélangées
+    aléatoirement dans le reste du tiers -- vérifié sur plusieurs graines."""
+    import game as G
+
+    filler = (G.TREE, 0, None)
+    deck = [filler] * 90  # multiple de 3, pour un calcul de tiers simple
+    third = len(deck) // 3
+    for seed in range(20):
+        rng = random.Random(seed)
+        result = G.insert_winter_cards(list(deck), rng, count=3)
+        # position déterministe : dernière carte du dernier tiers construit,
+        # donc la toute première piochée en y entrant.
+        assert result[third + 3 - 1] == (G.WINTER, None, None)
+        assert sum(1 for c in result if c[0] == G.WINTER) == 3
+        winter_positions = [i for i, c in enumerate(result) if c[0] == G.WINTER]
+        assert all(p <= third + 3 - 1 for p in winter_positions), \
+            "toutes les cartes Hiver doivent rester dans le dernier tiers"
+
+
+def test_third_winter_card_ends_the_game():
+    """La 3e carte Hiver piochée (winters_seen >= 3) met fin à la partie,
+    ni la 1ère ni la 2e."""
+    import game as G
+
+    g = G.Game(n_players=2, seed=1)
+    filler = (G.TREE, E.TREE_ID["OAK"], None)
+    winter = (G.WINTER, None, None)
+    g.deck = [filler] * 5 + [winter] * 3  # pioché par pop() : Hiver d'abord
+    g.current = 0
+    player = g.players[0]
+
+    g._draw_one(player)
+    assert g.winters_seen == 1
+    assert not g.over
+
+    g._draw_one(player)
+    assert g.winters_seen == 2
+    assert not g.over
+
+    g._draw_one(player)
+    assert g.winters_seen == 3
+    assert g.over

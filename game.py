@@ -55,6 +55,19 @@ une autre Taupe, un bonus de pose gratuite), qui s'empile et rend la main à
 la chaîne une fois résolu. Un rejeu de tour gagné pendant la chaîne
 (`pending_replay`) s'applique à sa fin, pas immédiatement.
 
+Taille du deck selon le nombre de joueurs (confirmé par Mehdi,
+`reduce_deck_for_player_count`) : 30 cartes retirées aléatoirement à 2
+joueurs, 20 à 3, 10 à 4, aucune à 5 (deck complet). Retrait fait sur les 158
+cartes physiques, avant la distribution des mains et avant l'insertion des
+cartes Hiver (toujours exactement 3, jamais retirées).
+
+Déclenchement de l'Hiver (confirmé par Mehdi, `insert_winter_cards`) : le
+deck restant (après réduction et distribution des mains) est découpé en 3
+tiers ; les 3 cartes Hiver vivent dans le DERNIER tiers pioché. La 1ère est
+TOUJOURS la première carte piochée en entrant dans ce tiers (position
+déterministe) ; les 2 autres sont mélangées aléatoirement dans le reste du
+tiers. La 3e carte Hiver piochée (`winters_seen >= 3`) met fin à la partie.
+
 Ce qui n'est PAS implémenté, et qui reste à faire pour un bot fiable :
   - bonus de paiement par couleur (Silver Fir, Douglas Fir, Oak, Badger,
     Fire Salamander, Stag Beetle)
@@ -111,19 +124,47 @@ def build_deck(rng):
     return cards  # 158 cartes ; les cartes Hiver sont insérées par Game
 
 
-def insert_winter_cards(deck, rng, count=3):
-    """Mélange les cartes Hiver dans le dernier tiers du deck.
+DECK_REDUCTION_BY_PLAYERS = {2: 30, 3: 20, 4: 10, 5: 0}
 
-    On pioche par la fin de la liste, donc le dernier tiers pioché est le
-    début de la liste. L'insertion se fait après la distribution des mains
-    d'ouverture, ce qui est équivalent (les 6 premières cartes de chaque
-    joueur ne peuvent pas venir du dernier tiers) et évite qu'un mulligan
-    ne remette une carte Hiver en circulation.
+
+def reduce_deck_for_player_count(deck, n_players, rng):
+    """Retire aléatoirement des cartes du deck selon le nombre de joueurs
+    (confirmé par Mehdi) : 30 cartes en moins à 2 joueurs, 20 à 3, 10 à 4,
+    aucune à 5 (on joue alors avec le deck complet). Les cartes retirées
+    sortent définitivement de la partie ; ce retrait se fait AVANT la
+    distribution des mains et avant l'insertion des cartes Hiver, sur les
+    158 cartes physiques seulement (les cartes Hiver ne sont jamais
+    retirées, il y en a toujours exactement 3).
+    """
+    n = DECK_REDUCTION_BY_PLAYERS.get(n_players, 0)
+    if n <= 0:
+        return deck
+    remove = set(rng.sample(range(len(deck)), n))
+    return [c for i, c in enumerate(deck) if i not in remove]
+
+
+def insert_winter_cards(deck, rng, count=3):
+    """Découpe le deck restant (après réduction par nombre de joueurs et
+    distribution des mains) en 3 tiers ; les cartes Hiver vivent dans le
+    DERNIER tiers pioché. On pioche par la fin de la liste, donc le dernier
+    tiers pioché est le début de la liste (`deck[:third]`).
+
+    Confirmé par Mehdi : la 1ère carte Hiver est TOUJOURS la première
+    piochée en entrant dans ce tiers -- position déterministe, pas
+    aléatoire. Les `count - 1` cartes Hiver restantes sont mélangées
+    aléatoirement dans le reste du tiers. La 3e carte Hiver piochée met fin
+    à la partie (`Game._draw_one`, `Game._plant_tree_feeds_clearing`).
+
+    L'insertion se fait après la distribution des mains d'ouverture, ce qui
+    est équivalent (les 6 premières cartes de chaque joueur ne peuvent pas
+    venir du dernier tiers) et évite qu'un mulligan ne remette une carte
+    Hiver en circulation.
     """
     third = len(deck) // 3
     tail = deck[:third]
-    for _ in range(count):
+    for _ in range(count - 1):
         tail.insert(rng.randrange(len(tail) + 1), (WINTER, None, None))
+    tail.append((WINTER, None, None))  # 1ère piochée : position déterministe
     return tail + deck[third:]
 
 
@@ -200,6 +241,7 @@ class Game:
     def __init__(self, n_players=2, seed=None):
         self.rng = random.Random(seed)
         self.deck = build_deck(self.rng)
+        self.deck = reduce_deck_for_player_count(self.deck, n_players, self.rng)
         self.players = [Player() for _ in range(n_players)]
         self.clearing = []
         self.current = 0
