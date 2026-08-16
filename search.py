@@ -43,7 +43,7 @@ import math
 import random
 
 from engine import TREE_ID
-from game import DWELLER, TREE, WINTER, Game, insert_winter_cards
+from game import DWELLER, TREE, WINTER, Game, choose_draw_source, insert_winter_cards
 
 C_PUCT = 1.4
 ROLLOUT_EPSILON = 0.25
@@ -61,11 +61,15 @@ ROLLOUT_CANDIDATES = 8
 def _fallback_action(game):
     """Action de repli quand aucune autre n'est retenue.
 
-    ("draw",) n'est légale que hors `pending_effect` (brique 2b : effet
-    "jouer gratuitement depuis la main" en attente) ; dans ce cas c'est
-    ("skip_effect",) qui joue ce rôle.
+    ("draw", source) n'est légale que hors `pending_effect` (brique 2b :
+    effet "jouer gratuitement depuis la main" en attente) ; dans ce cas
+    c'est ("skip_effect",) qui joue ce rôle. `source` reproduit le choix
+    heuristique `choose_draw_source` (greedy/rollout n'explorent pas la
+    Clairière, seul MCTS le fait via `legal_actions`).
     """
-    return ("skip_effect",) if game.pending_effect is not None else ("draw",)
+    if game.pending_effect is not None:
+        return ("skip_effect",)
+    return ("draw", choose_draw_source(game.clearing))
 
 
 # ---------------------------------------------------------------------------
@@ -382,7 +386,10 @@ class MCTS:
                       if a in legal]
         if not candidates:
             return _fallback_action(game)
-        return max(candidates)[1]
+        # key=... compare seulement les visites : les actions elles-mêmes ne
+        # sont pas toujours comparables entre elles (ex. ("draw", None) vs
+        # ("draw", 2)), max(candidates) planterait sur une égalité de visites.
+        return max(candidates, key=lambda t: t[0])[1]
 
 
 def play_game(policies, n_players=2, seed=None, max_turns=1000):

@@ -37,7 +37,8 @@ def hand_label(hand):
 
 def action_label(action):
     if action[0] == "draw":
-        return "Pioche"
+        source = action[1]
+        return "Pioche (deck)" if source is None else f"Pioche Clairière (carte #{source})"
     if action[0] == "skip_effect":
         return "Passe (effet en attente décliné)"
     if action[0] == "cave_discard":

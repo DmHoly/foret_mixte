@@ -195,17 +195,20 @@ def card_min_cost(card):
 
 
 def choose_draw_source(clearing):
-    """Choix pioche Clairière vs pioche aveugle (deck), à CHAQUE pioche du
-    jeu (tour normal ou effet de carte, confirmé par Mehdi).
+    """Choix pioche Clairière vs pioche aveugle (deck) par défaut, pour tous
+    les points de pioche déclenchés par un EFFET de carte (bonus jumelles,
+    Fougère arborescente, Ours brun, etc. -- voir `_draw_one`).
 
-    Heuristique, pas une décision de recherche : exposer ce choix à l'arbre
-    multiplierait le facteur de branchement sur l'action la plus fréquente
-    de la partie, pour un gain incertain. Une carte connue de la Clairière
-    est presque toujours au moins aussi utile qu'une carte aveugle inconnue
-    (on peut toujours la garder sans la jouer), donc on prend
-    systématiquement la moins chère de la Clairière quand elle est non
-    vide ; pioche aveugle sinon. Simplification assumée, comme
-    `choose_payment` et la sélection des cartes envoyées à la Grotte.
+    Heuristique, pas une décision de recherche : exposer CES pioches-là à
+    l'arbre multiplierait le facteur de branchement pour un gain incertain
+    (elles ne sont pas l'action la plus fréquente de la partie, contrairement
+    à la pioche de tour normal -- voir `AUTO`/`Game.legal_actions`, qui
+    EXPOSE ce choix-ci). Une carte connue de la Clairière est presque
+    toujours au moins aussi utile qu'une carte aveugle inconnue (on peut
+    toujours la garder sans la jouer), donc on prend systématiquement la
+    moins chère de la Clairière quand elle est non vide ; pioche aveugle
+    sinon. Simplification assumée, comme `choose_payment` et la sélection
+    des cartes envoyées à la Grotte.
 
     Retourne l'indice dans `clearing` à prendre, ou None pour piocher dans
     le deck.
@@ -213,6 +216,9 @@ def choose_draw_source(clearing):
     if not clearing:
         return None
     return min(range(len(clearing)), key=lambda i: card_min_cost(clearing[i]))
+
+
+AUTO = object()  # sentinel : _draw_one doit decider via choose_draw_source
 
 
 class Player:
@@ -292,8 +298,16 @@ class Game:
 
     # -- pioche ------------------------------------------------------------
 
-    def _draw_one(self, player):
-        idx = choose_draw_source(self.clearing)
+    def _draw_one(self, player, source=AUTO):
+        """`source` : None = pioche aveugle forcée, un entier = index dans
+        `self.clearing` à prendre, `AUTO` (défaut) = laisser
+        `choose_draw_source` décider. Seule la pioche de tour normal
+        (`Game.legal_actions`, action `("draw", source)`) passe un `source`
+        explicite -- une vraie décision de recherche ; tous les autres
+        points de pioche (effets de carte) restent en `AUTO`, voir
+        `choose_draw_source`.
+        """
+        idx = choose_draw_source(self.clearing) if source is AUTO else source
         if idx is not None:
             player.hand.append(self.clearing.pop(idx))
             return
@@ -344,11 +358,20 @@ class Game:
     def legal_actions(self):
         """Actions du joueur courant, identifiées de façon invariante.
 
-        Une action est ("draw",), ("tree", tree_id),
+        Une action est ("draw", source), ("tree", tree_id),
         ("dweller", dweller_id, index_d_arbre, position), ou, si un effet
         "jouer gratuitement depuis la main" est en attente (voir
         `pending_effect`, brique 2b) : ("free_dweller", dweller_id,
         index_d_arbre, position) ou ("skip_effect",).
+
+        `source` (pioche de tour normal, exposée à la recherche -- confirmé
+        par Mehdi que c'est la décision, pas juste la mécanique, qui doit
+        être jouable) : None pioche le deck à l'aveugle, un entier prend la
+        carte à cet index dans `self.clearing`. Une carte par option pour
+        rester alignée avec la carte physique réellement prise (pas un choix
+        "petit/grand prix" agrégé) ; la 2e pioche éventuelle (main sous
+        HAND_LIMIT après la 1ère) reste `AUTO` -- voir `Game._draw_one`,
+        simplification assumée comme le paiement.
 
         Point important pour la recherche : l'action ne référence PAS l'indice
         de la carte en main. Cet indice se décale à chaque pioche et à chaque
@@ -385,7 +408,8 @@ class Game:
                             actions.append(key)
             return actions
 
-        return [("draw",)] + self._payable_actions(hand, forest)
+        draws = [("draw", None)] + [("draw", i) for i in range(len(self.clearing))]
+        return draws + self._payable_actions(hand, forest)
 
     @staticmethod
     def _payable_actions(hand, forest):
@@ -496,7 +520,7 @@ class Game:
             return self
 
         if action[0] == "draw":
-            self._draw_one(player)
+            self._draw_one(player, action[1])
             if len(player.hand) < HAND_LIMIT and not self.over:
                 self._draw_one(player)
         else:
