@@ -79,14 +79,14 @@ import random
 
 from engine import (
     CAVE_CHOICE_DWELLERS, CLEARING_TO_CAVE_DWELLERS, DRAW_FIXED,
-    DRAW_IF_BONUS, DRAW_PER_COUNT, DWELLER_COST, DWELLER_NAME,
+    DRAW_IF_BONUS, DRAW_PER_COUNT, DWELLER_COST, DWELLER_ID, DWELLER_NAME,
     DWELLER_PLAY_FREE_IF_BONUS, DWELLER_TYPE_IDS, FILTER_ANY_ANIMAL,
     FILTER_DWELLER, FILTER_TYPE, IS_ANIMAL, MUSHROOM_TRIGGER,
     MUSHROOM_TRIGGER_ANIMAL, MUSHROOM_TRIGGER_ANY_SYMBOL,
     MUSHROOM_TRIGGER_POSITION, N_DWELLERS, PLAY_CHAIN_DWELLERS, POS_ID,
     REPLAY_ALWAYS, REPLAY_IF_BONUS, SHARE_MAX, TREE_COPIES, TREE_COST,
-    TREE_DRAW_FIXED, TREE_NAME, TREE_PLAY_FREE_IF_BONUS, TREE_REPLAY_ALWAYS,
-    TREE_REPLAY_IF_BONUS, VARIANTS, Forest, score_players,
+    TREE_DRAW_FIXED, TREE_ID, TREE_NAME, TREE_PLAY_FREE_IF_BONUS,
+    TREE_REPLAY_ALWAYS, TREE_REPLAY_IF_BONUS, VARIANTS, Forest, score_players,
 )
 
 TREE, DWELLER, WINTER = 0, 1, 2
@@ -194,25 +194,56 @@ def card_min_cost(card):
     return min(card_cost(card, 0), card_cost(card, 1))
 
 
+
+# Cartes "fortes" au sens du guide de combos (docs/combo_guide.html,
+# combos n1-n6 par espérance) : Sycomore, Fouine, Chevreuil, Cerf élaphe,
+# Autour des palombes, Daim, Fourmi des bois, + le Lièvre (auto-combo
+# quadratique). Mesuré (session du 16/08, sur demande de Mehdi) : une
+# carte de Clairière CONNUE et forte vaut nettement plus qu'une pioche
+# aveugle (+21 pts en moyenne vs +5, test isolé à common random numbers)
+# -- piocher une carte forte visible, c'est une pioche CIBLÉE qui réduit
+# la variance, contrairement à la pioche aveugle du deck.
+STRONG_DWELLER_IDS = frozenset({
+    DWELLER_ID["BEECH_MARTEN"], DWELLER_ID["ROE_DEER"], DWELLER_ID["RED_DEER"],
+    DWELLER_ID["GOSHAWK"], DWELLER_ID["FALLOW_DEER"], DWELLER_ID["WOOD_ANT"],
+    DWELLER_ID["EUROPEAN_HARE"],
+})
+STRONG_TREE_IDS = frozenset({TREE_ID["SYCAMORE"]})
+
+
+def _is_strong_card(card):
+    kind, a, b = card
+    if kind == TREE:
+        return a in STRONG_TREE_IDS
+    return a[0] in STRONG_DWELLER_IDS or b[0] in STRONG_DWELLER_IDS
+
+
 def choose_draw_source(clearing):
     """Choix pioche Clairière vs pioche aveugle (deck), à CHAQUE pioche du
     jeu (tour normal ou effet de carte, confirmé par Mehdi).
 
     Heuristique, pas une décision de recherche : exposer ce choix à l'arbre
     multiplierait le facteur de branchement sur l'action la plus fréquente
-    de la partie, pour un gain incertain. Une carte connue de la Clairière
-    est presque toujours au moins aussi utile qu'une carte aveugle inconnue
-    (on peut toujours la garder sans la jouer), donc on prend
-    systématiquement la moins chère de la Clairière quand elle est non
-    vide ; pioche aveugle sinon. Simplification assumée, comme
-    `choose_payment` et la sélection des cartes envoyées à la Grotte.
+    de la partie, pour un gain incertain (testé et abandonné pour la pioche
+    de tour normal, voir historique -- résultat négatif). Une carte connue
+    de la Clairière est presque toujours au moins aussi utile qu'une carte
+    aveugle inconnue (on peut toujours la garder sans la jouer).
+
+    Priorité en deux temps : 1) une carte de Clairière "forte" (voir
+    `STRONG_DWELLER_IDS`/`STRONG_TREE_IDS`) si il y en a une -- la moins
+    chère parmi les fortes s'il y en a plusieurs ; 2) à défaut, la moins
+    chère de la Clairière tout court (flexible, quasi toujours jouable) ;
+    pioche aveugle sinon. Simplification assumée, comme `choose_payment`
+    et la sélection des cartes envoyées à la Grotte.
 
     Retourne l'indice dans `clearing` à prendre, ou None pour piocher dans
     le deck.
     """
     if not clearing:
         return None
-    return min(range(len(clearing)), key=lambda i: card_min_cost(clearing[i]))
+    strong = [i for i, c in enumerate(clearing) if _is_strong_card(c)]
+    pool = strong if strong else range(len(clearing))
+    return min(pool, key=lambda i: card_min_cost(clearing[i]))
 
 
 class Player:
