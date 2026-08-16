@@ -42,10 +42,19 @@ l'art :
 import math
 import random
 
+from engine import TREE_ID
 from game import DWELLER, TREE, WINTER, Game, insert_winter_cards
 
 C_PUCT = 1.4
 ROLLOUT_EPSILON = 0.25
+
+# Prime de rollout pour le Sycomore (voir `rollout`, `greedy_action`) :
+# combo n°1 par espérance dans docs/combo_guide.html (49 pts, 92% des
+# parties), mais delta immédiat quasi nul à la pose -> sous-joué par un
+# rollout myope sans cette correction. Valeur non calibrée finement,
+# testée en tête-à-tête MCTS avant adoption (voir reference/, session du
+# 15/08 sur demande de Mehdi).
+SYCAMORE_ROLLOUT_BONUS = {TREE_ID["SYCAMORE"]: 10.0}
 ROLLOUT_CANDIDATES = 8
 
 
@@ -64,13 +73,25 @@ def _fallback_action(game):
 # ---------------------------------------------------------------------------
 
 
-def greedy_action(game, rng, epsilon=0.0, candidates=None, tree_bonus=6):
+def greedy_action(game, rng, epsilon=0.0, candidates=None, tree_bonus=6,
+                   tree_combo_bonus=None):
     """Coup maximisant le gain immédiat, avec un correctif d'ouverture.
 
     Un arbre ne rapporte presque rien à la pose mais ouvre 4 emplacements.
     Sans correctif, une politique purement gloutonne ne plante jamais d'arbre
     et plafonne très bas. `tree_bonus` est une prime décroissante avec le
     nombre d'arbres déjà en forêt ; c'est une heuristique, pas une règle.
+
+    `tree_combo_bonus` (optionnel, {tree_id: bonus}) : prime supplémentaire
+    fixe à la plantation d'une espèce donnée, pour corriger un biais
+    d'horizon spécifique au ROLLOUT de MCTS (voir `rollout()`) -- PAS
+    activé par défaut, et volontairement absent de `greedy_policy` : une
+    tentative précédente d'injecter une table de force globale dans la
+    politique de décision elle-même (reference/strength_policy.py) a
+    dégradé la qualité de jeu (le delta exact résiste mal à une correction
+    grossière appliquée à CHAQUE décision réelle). Ici la correction ne
+    s'applique qu'aux coups simulés à l'intérieur d'un rollout tronqué,
+    pas aux décisions réellement jouées.
     """
     actions = game.legal_actions()
     if len(actions) == 1:
@@ -93,6 +114,8 @@ def greedy_action(game, rng, epsilon=0.0, candidates=None, tree_bonus=6):
     for a in plays:
         if a[0] == "tree":
             gain = forest.delta_tree(a[1]) + tree_bonus / (1 + n_trees)
+            if tree_combo_bonus:
+                gain += tree_combo_bonus.get(a[1], 0.0)
         elif a[0] == "cave_discard":
             # 1 pt par carte envoyée à la Grotte (Raton laveur) ; on ne
             # modélise pas ici la perte de valeur des cartes défaussées,
@@ -240,7 +263,7 @@ def determinize(game, observer, rng):
     return g
 
 
-def rollout(game, rng, max_moves=30):
+def rollout(game, rng, max_moves=30, tree_combo_bonus=None):
     """Rollout tronqué puis évaluation par le score courant.
 
     Dérouler la partie jusqu'à l'hiver coûte ~70 coups ; tronquer à 30 et
@@ -249,6 +272,14 @@ def rollout(game, rng, max_moves=30):
     cours de partie, ce qui rend l'évaluation tronquée peu biaisée. C'est
     l'équivalent bon marché d'une fonction de valeur, en attendant d'en
     apprendre une.
+
+    `tree_combo_bonus` : voir `greedy_action`. Corrige, PENDANT le rollout
+    seulement, le biais d'horizon du delta immédiat sur les arbres dont la
+    valeur se révèle tard (ex. Sycomore, qui ne rapporte quasiment rien à
+    la pose mais domine le classement d'espérance en fin de partie, voir
+    docs/combo_guide.html) : sans lui, un rollout gouverné par le delta
+    exact ne plante jamais un 2e/3e Sycomore, et sous-estime donc la vraie
+    valeur des branches qui y mènent.
     """
     moves = 0
     while not game.over and moves < max_moves:
@@ -257,7 +288,8 @@ def rollout(game, rng, max_moves=30):
             game.apply(actions[0])
         else:
             game.apply(greedy_action(game, rng, ROLLOUT_EPSILON,
-                                     ROLLOUT_CANDIDATES))
+                                     ROLLOUT_CANDIDATES,
+                                     tree_combo_bonus=tree_combo_bonus))
         moves += 1
     return game.scores()
 

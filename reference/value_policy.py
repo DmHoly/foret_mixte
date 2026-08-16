@@ -111,7 +111,8 @@ def make_pairwise_leaf_eval(model_path=None):
     return leaf_eval
 
 
-def make_pairwise_hybrid_leaf_eval(model_path=None, short_rollout_depth=10, seed=None):
+def make_pairwise_hybrid_leaf_eval(model_path=None, short_rollout_depth=10, seed=None,
+                                    tree_combo_bonus=None):
     """Quelques coups réels (rollout court, comme `make_hybrid_leaf_eval`)
     suivis d'une évaluation par le modèle linéaire contrastif, au lieu
     d'appeler le modèle directement sur l'état de sélection/expansion brut
@@ -125,6 +126,11 @@ def make_pairwise_hybrid_leaf_eval(model_path=None, short_rollout_depth=10, seed
     laquelle il a été entraîné, en plus de laisser les coups réels
     différencier les branches (le rôle qu'ils jouent déjà dans
     `make_hybrid_leaf_eval`).
+
+    `tree_combo_bonus` (optionnel, {tree_id: bonus}) : voir
+    `search.greedy_action`/`search.rollout` -- corrige le biais d'horizon
+    du delta immédiat sur les arbres à valeur différée (ex. Sycomore)
+    PENDANT ce mini-rollout, pas dans les décisions réellement jouées.
     """
     weights, _names = load_pairwise_model(model_path)
     rng = random.Random(seed)
@@ -137,7 +143,8 @@ def make_pairwise_hybrid_leaf_eval(model_path=None, short_rollout_depth=10, seed
                 state.apply(actions[0])
             else:
                 state.apply(S.greedy_action(
-                    state, rng, S.ROLLOUT_EPSILON, S.ROLLOUT_CANDIDATES))
+                    state, rng, S.ROLLOUT_EPSILON, S.ROLLOUT_CANDIDATES,
+                    tree_combo_bonus=tree_combo_bonus))
             moves += 1
         scores_now = state.scores()
         if state.over:
