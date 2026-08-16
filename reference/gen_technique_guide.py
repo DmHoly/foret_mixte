@@ -31,7 +31,7 @@ sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / "reference"))
 
 import engine as E  # noqa: E402
-from game import DWELLER, TREE, Game, card_min_cost  # noqa: E402
+from game import DWELLER, TREE, Game, choose_draw_source  # noqa: E402
 from search import MCTS  # noqa: E402
 import value_policy as VP  # noqa: E402
 
@@ -126,10 +126,11 @@ def play_tracked(seed, iterations=150, short_rollout_depth=10, max_turns=600):
             tr.opening_actions.append((own_idx, kind))
 
         if kind == "draw" and clearing_before:
-            idx = min(range(len(clearing_before)), key=lambda i: card_min_cost(clearing_before[i]))
-            taken = clearing_before[idx]
-            did_set = {taken[1][0], taken[2][0]} if taken[0] == DWELLER else set()
-            tr.clearing_takes.append(bool(did_set & TOP_COMBO_DIDS))
+            idx = choose_draw_source(clearing_before)  # vraie regle live, pas une copie figee
+            taken = clearing_before[idx] if idx is not None else None
+            if taken is not None:
+                did_set = {taken[1][0], taken[2][0]} if taken[0] == DWELLER else set()
+                tr.clearing_takes.append(bool(did_set & TOP_COMBO_DIDS))
 
         game.apply(action)
         for b in bots.values():
