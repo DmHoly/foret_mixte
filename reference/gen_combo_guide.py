@@ -359,6 +359,7 @@ TRUE_COMBO_CATS = {"combo", "auto-combo", "combo-binaire", "positionnel", "set"}
 NAV = """<nav class="pages" aria-label="Pages du guide">
   <a href="combo_guide.html" aria-current="{cur1}">Guide des combos</a>
   <a href="tactical_guide.html" aria-current="{cur2}">Guide tactique</a>
+  <a href="technique_guide.html" aria-current="{cur3}">Guide technique</a>
 </nav>"""
 
 
@@ -386,7 +387,8 @@ def render(agg):
 
     def page_shell(title, body, active):
         nav = NAV.format(cur1="page" if active == "combo" else "false",
-                          cur2="page" if active == "tactical" else "false")
+                          cur2="page" if active == "tactical" else "false",
+                          cur3="page" if active == "technique" else "false")
         return f"""<title>{title}</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>

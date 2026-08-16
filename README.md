@@ -73,7 +73,8 @@ python bench.py mcts_pairwise_hybrid 300 8 10       # MCTS (config recommandée)
 | `reference/card_strength.py`, `card_strength_mcts.py` | Force intrinsèque des cartes par retrait contrefactuel. |
 | `reference/features.py`, `gen_value_dataset.py`, `train_value_model.py` | Modèle de valeur absolu (MLP), voir [limitations](#fonctions-de-valeur-pour-mcts). |
 | `reference/gen_combo_guide.py` | Génère `docs/combo_guide.html` et `docs/tactical_guide.html`, voir [guides de jeu](#guides-de-jeu-combos-et-tactique). |
-| `docs/combo_guide.html`, `docs/tactical_guide.html` | Guides de jeu pour un humain : combos classés par espérance, enseignements MCTS vs greedy. **Générés**, ne pas éditer à la main. |
+| `reference/gen_technique_guide.py` | Génère `docs/technique_guide.html` (mécanique de jeu coup par coup), voir [guides de jeu](#guides-de-jeu-combos-et-tactique). |
+| `docs/combo_guide.html`, `docs/tactical_guide.html`, `docs/technique_guide.html` | Guides de jeu pour un humain : combos classés par espérance, enseignements MCTS vs greedy, mécanique de jeu coup par coup. **Générés**, ne pas éditer à la main. |
 | `archive/` | Scripts d'itération et audit remplacés par des versions plus propres, conservés pour l'historique (voir `archive/README.md`). |
 
 ## Le moteur de scoring
@@ -268,7 +269,7 @@ Constats :
 
 ## Guides de jeu (combos et tactique)
 
-Deux pages HTML, générées depuis des parties simulées, pensées pour un
+Trois pages HTML, générées depuis des parties simulées, pensées pour un
 joueur humain plutôt que pour lire du code :
 
 - **[docs/combo_guide.html](docs/combo_guide.html)** — classe toutes les
@@ -291,25 +292,50 @@ joueur humain plutôt que pour lire du code :
   combos-vedettes ; les seuils binaires ne valent pas la peine d'être
   sur-investis). Utile pour comprendre *pourquoi* un coup gagne à long
   terme, pas seulement lequel.
+- **[docs/technique_guide.html](docs/technique_guide.html)** — descend
+  encore d'un cran : pas la composition finale des forêts, mais chaque
+  carte suivie individuellement, coup par coup, depuis son entrée en main
+  jusqu'à sa résolution (jouée ou défaussée en paiement). Répond à des
+  questions de mécanique de jeu qu'un score final ne peut pas trancher —
+  *faut-il piocher ou poser en début de partie ? quelles cartes se posent
+  sans réfléchir dès qu'elles apparaissent ? lesquelles finissent presque
+  toujours en monnaie d'échange ? combien de cartes garde-t-on vraiment en
+  main ?* Constat notable : pas de phase d'ouverture dogmatique (le bot
+  pose dès le tour 1 s'il y a une carte qui vaut le coup), une main tenue
+  très mince (médiane à 2 cartes, tombe régulièrement à 0), et des arbres
+  coûteux (Marronnier, Chêne, Sapin Douglas) qui finissent défaussés plus
+  souvent que plantés une fois la diversité d'espèces déjà acquise.
 
-Les deux pages s'ouvrent directement dans un navigateur (aucun serveur
-requis, aucune dépendance) et se renvoient l'une à l'autre par un lien en
-haut de page. GitHub n'affiche pas de rendu pour un fichier `.html` (juste
-le code source), d'où les aperçus ci-dessous : cliquer dessus (ou sur les
-liens plus haut) ouvre la vraie page interactive, après avoir cloné ou
-téléchargé le dépôt.
+Les trois pages s'ouvrent directement dans un navigateur (aucun serveur
+requis, aucune dépendance) et se renvoient les unes aux autres par un lien
+en haut de page. GitHub n'affiche pas de rendu pour un fichier `.html`
+(juste le code source), d'où les aperçus ci-dessous : cliquer dessus (ou
+sur les liens plus haut) ouvre la vraie page interactive, après avoir
+cloné ou téléchargé le dépôt.
 
 <a href="docs/combo_guide.html"><img src="docs/screenshots/combo_guide_preview.png" alt="Aperçu du guide des combos : classement des combos par espérance de points" width="720"></a>
 
 <a href="docs/tactical_guide.html"><img src="docs/screenshots/tactical_guide_preview.png" alt="Aperçu du guide tactique : écarts MCTS vs greedy et enseignements de jeu" width="720"></a>
 
-Générées par `reference/gen_combo_guide.py`, qui rejoue les parties,
-décompose `Forest.score()` terme par terme (vérifié égal au score réel du
-moteur à chaque forêt) et agrège les statistiques :
+<a href="docs/technique_guide.html"><img src="docs/screenshots/technique_guide_preview.png" alt="Aperçu du guide technique : tempo d'ouverture, immédiateté de pose, taux de défausse par carte" width="720"></a>
+
+Le guide des combos et le guide tactique sont générés par
+`reference/gen_combo_guide.py`, qui rejoue les parties, décompose
+`Forest.score()` terme par terme (vérifié égal au score réel du moteur à
+chaque forêt) et agrège les statistiques :
 
 ```bash
 python reference/gen_combo_guide.py                  # 300 parties greedy + 18 MCTS (~4 min)
 python reference/gen_combo_guide.py 50 4 100          # échantillon réduit, plus rapide
+```
+
+Le guide technique est généré séparément par `reference/gen_technique_guide.py`,
+qui instrumente des parties MCTS coup par coup (suivi de chaque carte
+physique par identité Python, pas seulement l'état final) :
+
+```bash
+python reference/gen_technique_guide.py               # 30 parties MCTS, 150 it. (~6 min)
+python reference/gen_technique_guide.py 10 100         # échantillon réduit, plus rapide
 ```
 
 ## Limitations connues
