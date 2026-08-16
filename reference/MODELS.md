@@ -39,3 +39,36 @@ heuristique de Clairière), pas d'un bug dans ces scripts.
 Pour comparer deux modèles en tête-à-tête, `reference/bench_heuristics.py`
 accepte n'importe quel `model_path` via `value_policy.load_pairwise_model`
 sans toucher au fichier par défaut.
+
+## Résultat de référence (16/08, `pairwise_model.joblib` réentraîné)
+
+Tournoi rond-robin complet entre les 4 variantes {Greedy, MCTS(150it)} x
+{Clairière forte, Clairière faible}, sièges alternés, `python
+reference/bench_heuristics.py` :
+
+| Match | Score | Écart moyen (SE) | Médiane |
+|---|---|---|---|
+| B vs A | 69/100 | +47.6 (7.9) | +43.5 |
+| D vs C | 21/30 | +36.1 (14.2) | +22.5 |
+| B vs C | 20/30 | +47.8 (15.5) | +10.0 |
+| D vs B | 15/30 (nul) | -29.7 (14.9) | +0.5 |
+| D vs A | 21/30 | -2.5 (11.7) | +11.5 |
+| C vs A | 15/30 (nul) | -36.9 (18.6) | -1.5 |
+
+Classement agrégé (victoires / parties jouées) : **B 65.0%, D 63.3%, C
+37.8%, A 33.1%**.
+
+Deux points notables par rapport au tournoi avec l'ancien modèle (D à
+40% contre B, C à 73% contre A) :
+
+- **D vs B est passé de 12/30 à 15/30** (quasi-parité) : le réentraînement
+  comble l'essentiel de l'écart qui faisait perdre le bot par défaut face
+  à Greedy+forte.
+- **C (MCTS + Clairière faible) s'est dégradé face à A** (73% -> 50%). Le
+  modèle vivant est maintenant entraîné sur des parties jouées sous la
+  heuristique **forte** ; l'utiliser avec un MCTS qui joue lui-même en
+  heuristique **faible** le place hors de sa distribution d'entraînement
+  -- l'inverse du problème corrigé pour D. Sans conséquence en pratique
+  (l'heuristique faible n'est plus utilisée nulle part par défaut), mais
+  c'est une bonne illustration du principe : un modèle de valeur n'est
+  fiable que sur les états qui ressemblent à ceux vus à l'entraînement.
