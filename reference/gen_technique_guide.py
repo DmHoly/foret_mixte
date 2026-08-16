@@ -372,14 +372,16 @@ depuis son entrée en main jusqu'à sa résolution (jouée, ou défaussée comme
 </section>
 
 <section aria-labelledby="clearing">
-  <h2 id="clearing">Choix en Clairière : pas (encore) une tactique apprise</h2>
-  <p class="section-note">Rappel : la carte prise en Clairière suit une règle fixe (la moins chère
-  disponible), jamais une décision de recherche — voir le guide tactique pour la tentative
-  d'exposer ce choix à MCTS, abandonnée (résultat négatif mesuré). Cette règle fixe tombe par
-  coïncidence sur une carte de combo fort (Fouine, Chevreuil, Cerf, Autour, Daim, Fourmi des bois)
-  dans <strong>{pct(cl['p_top_combo'])}</strong> des pioches en Clairière ({cl['n']} pioches
-  observées) — la plupart des prises restent de la carte bon marché ordinaire, pas une prise
-  ciblée.</p>
+  <h2 id="clearing">Choix en Clairière : ciblage délibéré, pas une décision de recherche</h2>
+  <p class="section-note">La carte prise en Clairière suit une règle fixe en deux temps — pas une
+  décision de recherche, voir le guide tactique pour la tentative d'exposer ce choix à MCTS,
+  abandonnée (résultat négatif mesuré) : d'abord une carte forte connue (Sycomore, Fouine,
+  Chevreuil, Cerf, Autour, Daim, Fourmi des bois, Lièvre) si la Clairière en contient une, sinon la
+  moins chère disponible. Mesuré : une carte forte tombe dans <strong>{pct(cl['p_top_combo'])}</strong>
+  des pioches en Clairière ({cl['n']} pioches observées) — plus une coïncidence, un ciblage
+  délibéré (voir le guide des combos : une carte connue et forte vaut +18 pts en moyenne contre
+  seulement +3 pts pour une pioche aveugle équivalente). Validé en tête-à-tête contre l'ancienne
+  règle "toujours la moins chère" : 69/100 victoires en greedy, 19/30 en MCTS.</p>
 </section>
 """
 
