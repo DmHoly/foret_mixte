@@ -69,9 +69,16 @@ python bench.py mcts_pairwise_hybrid 300 8 10       # MCTS (config recommandée)
 | `run_narrated_hybrid.py` | Rejoue une partie MCTS coup par coup (main, alternatives explorées, score). |
 | `run_stats_hybrid.py` | Statistiques agrégées (fréquence de jeu par carte) sur N parties MCTS. |
 | `reference/value_policy.py` | Fonctions d'évaluation de feuille (`leaf_eval`) pour MCTS. |
-| `reference/gen_pairwise_dataset.py`, `train_pairwise_model.py` | Génère et entraîne le modèle de valeur contrastif. |
+| `reference/gen_pairwise_dataset.py`, `train_pairwise_model.py` | Génère et entraîne le modèle de valeur contrastif (`pairwise_model.joblib`). |
+| `reference/MODELS.md` | Index des fichiers `.joblib`/`.npz` de `reference/` : lequel est chargé par défaut, lesquels sont des sauvegardes historiques et pourquoi. |
 | `reference/card_strength.py`, `card_strength_mcts.py` | Force intrinsèque des cartes par retrait contrefactuel. |
 | `reference/features.py`, `gen_value_dataset.py`, `train_value_model.py` | Modèle de valeur absolu (MLP), voir [limitations](#fonctions-de-valeur-pour-mcts). |
+| `reference/bonus_value_experiment.py` | Valeur en points du déclenchement du bonus jumelles (paiement avec/sans le bon symbole, même état). |
+| `reference/diagnose_value_bias.py` | Diagnostic : le modèle de valeur est-il biaisé sur les états hors distribution d'entraînement (branches spéculatives que MCTS explore) ? |
+| `reference/free_pose_value_experiment.py` | Valeur en points d'utiliser effectivement une pose gratuite plutôt que de la décliner (`skip_effect`). |
+| `reference/marginal_value_experiments.py` | Valeur marginale isolée d'un rejeu forcé et d'une carte gratuite (aveugle vs connue en Clairière), à seed commune. Voir la section "Combien vaut un tour, une carte, une pioche ciblée ?" de `docs/combo_guide.html`. |
+| `reference/run_combo_log.py` | Batch de parties instrumentées -> `reference/combo_log.jsonl` (un coup = une ligne JSON), source de données de `gen_combo_guide.py`. |
+| `reference/bench_heuristics.py` | Tournoi rond-robin {Greedy, MCTS} x {Clairière forte, Clairière faible} : isole l'apport de la politique de décision de celui de l'heuristique de pioche. |
 | `reference/gen_combo_guide.py` | Génère `docs/combo_guide.html` et `docs/tactical_guide.html`, voir [guides de jeu](#guides-de-jeu-combos-et-tactique). |
 | `reference/gen_technique_guide.py` | Génère `docs/technique_guide.html` (mécanique de jeu coup par coup), voir [guides de jeu](#guides-de-jeu-combos-et-tactique). |
 | `docs/combo_guide.html`, `docs/tactical_guide.html`, `docs/technique_guide.html` | Guides de jeu pour un humain : combos classés par espérance, enseignements MCTS vs greedy, mécanique de jeu coup par coup. **Générés**, ne pas éditer à la main. |
