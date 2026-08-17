@@ -62,12 +62,20 @@ def _rollout_score(state, seed, depth, observer):
 
 def generate_pairs(n_games, seed0, k_candidates=4, depth=20, sample_every=4,
                     trajectory_epsilon=0.4):
-    """Retourne (Xd, yd, Xa, Xb) : Xd/yd sont les diffs (voir train_pairwise_model.py,
-    modèle linéaire), Xa/Xb les features BRUTES (non soustraites) de chaque
-    moitié de paire, dans le même ordre -- nécessaires pour un modèle non
-    linéaire (train_pairwise_mlp.py) qui ne peut pas s'entraîner directement
-    sur la différence (MLP(a-b) != MLP(a)-MLP(b))."""
-    Xd, yd, Xa, Xb = [], [], [], []
+    """Retourne (Xd, yd, Xa, Xb, game_idx) : Xd/yd sont les diffs (voir
+    train_pairwise_model.py, modèle linéaire), Xa/Xb les features BRUTES
+    (non soustraites) de chaque moitié de paire, dans le même ordre --
+    nécessaires pour un modèle non linéaire (train_pairwise_mlp.py) qui ne
+    peut pas s'entraîner directement sur la différence (MLP(a-b) !=
+    MLP(a)-MLP(b)). `game_idx` (0-indexé, une valeur par paire) permet un
+    split train/test AU NIVEAU DES PARTIES plutôt que des paires : plusieurs
+    paires viennent de la MÊME partie (échantillonnées tous les
+    `sample_every` tours le long d'une trajectoire), un split au niveau des
+    paires laisse fuiter des paires très corrélées entre train et test --
+    un modèle à forte capacité (MLP) peut alors mémoriser des motifs propres
+    aux parties d'entraînement sans que ça se voie dans le score de
+    validation (diagnostiqué le 16/08, voir reference/MODELS.md)."""
+    Xd, yd, Xa, Xb, game_idx = [], [], [], [], []
     for gi in range(n_games):
         seed = seed0 + gi
         g = G.Game(n_players=2, seed=seed)
@@ -108,21 +116,24 @@ def generate_pairs(n_games, seed0, k_candidates=4, depth=20, sample_every=4,
                             yd.append(scores_by_action[ai] - scores_by_action[aj])
                             Xa.append(fi)
                             Xb.append(fj)
+                            game_idx.append(gi)
             action = S.greedy_action(g, traj_rng, epsilon=trajectory_epsilon)
             g.apply(action)
             turns += 1
-    return Xd, yd, Xa, Xb
+    return Xd, yd, Xa, Xb, game_idx
 
 
 if __name__ == "__main__":
     n_games = int(sys.argv[1]) if len(sys.argv) > 1 else 150
 
-    Xd, yd, Xa, Xb = generate_pairs(n_games, seed0=30000)
+    Xd, yd, Xa, Xb, game_idx = generate_pairs(n_games, seed0=30000)
     Xd = np.asarray(Xd, dtype=np.float32)
     yd = np.asarray(yd, dtype=np.float32)
     Xa = np.asarray(Xa, dtype=np.float32)
     Xb = np.asarray(Xb, dtype=np.float32)
+    game_idx = np.asarray(game_idx, dtype=np.int32)
     feature_names = list(F.FEATURE_NAMES) + ["raw_score"]
     out = Path(__file__).resolve().parent / "pairwise_dataset.npz"
-    np.savez_compressed(out, Xd=Xd, yd=yd, Xa=Xa, Xb=Xb, feature_names=np.array(feature_names))
+    np.savez_compressed(out, Xd=Xd, yd=yd, Xa=Xa, Xb=Xb, game_idx=game_idx,
+                         feature_names=np.array(feature_names))
     print(f"{n_games} parties -> {Xd.shape[0]} paires, {Xd.shape[1]} features -> {out}")

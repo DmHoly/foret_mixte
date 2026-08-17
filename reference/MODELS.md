@@ -163,22 +163,61 @@ En tête-à-tête contre B pourtant : **D avec ce modèle perd 1/30 (3%)**,
 formulé, malgré une précision hors ligne bien supérieure au modèle
 linéaire qui, lui, tient la comparaison face à B (13-15/30).
 
-Explication la plus probable : le R²/MAE mesurés sont sur un jeu de test
-tiré de la **même distribution** que l'entraînement (self-play sous la
-politique gloutonne actuelle). MCTS explore délibérément des états HORS
-de cette distribution (c'est le rôle du terme d'exploration UCT) -- un
-réseau ReLU peut extrapoler de façon incontrôlée sur des entrées jamais
-vues (sorties arbitrairement grandes ou de mauvais signe), alors qu'un
-modèle linéaire reste "sage" même en extrapolation, structurellement
-incapable de produire un pic délirant. Être précis DANS la distribution
-d'entraînement ne protège pas d'être dangereusement faux HORS
-distribution -- précisément le régime où MCTS a le plus besoin d'un
-jugement fiable. Piste non testée pour confirmer : comparer les deux
-modèles avec `reference/diagnose_value_bias.py` (biais on-policy vs
-off-policy), conçu exactement pour ce diagnostic.
+## Diagnostic (16/08) : une fuite de données, pas un problème d'extrapolation
+
+Question de Mehdi face à cet échec surprenant (un modèle bien meilleur
+hors ligne perd quand même) : dataset trop petit ? mauvaises features ?
+Diagnostic dédié (`diagnose_pairwise_bias.py`, scratchpad, adapté de
+`reference/diagnose_value_bias.py`) : comparer les prédictions à une
+référence propre (moyenne de 5 rollouts, peu bruitée) sur des états
+**frais**, tirés indépendamment du dataset d'entraînement.
+
+| Groupe | MAE linéaire | MAE MLP |
+|---|---|---|
+| on-policy (états "normaux") | 3.48 | **10.48** |
+| off-policy (branches spéculatives type MCTS) | 2.41 | **13.11** |
+
+Signal clé : le MLP est déjà mauvais **sur des états on-policy tout à
+fait ordinaires** (10.48, très loin du MAE=4.2 annoncé à l'entraînement)
+-- pas seulement hors distribution. Cause identifiée : `train_pairwise_mlp.py`
+(comme `train_pairwise_model.py` avant lui) découpait train/test **au
+niveau des paires**, pas des parties. Plusieurs paires proviennent de la
+MÊME partie (échantillonnées tous les 4 tours le long d'une trajectoire)
+-- des paires très corrélées se retrouvaient des deux côtés du split. Le
+modèle linéaire, peu expressif, ne peut pas vraiment exploiter cette
+fuite ; un MLP à ~7000 paramètres, si.
+
+**Correction** : `gen_pairwise_dataset.py` trace maintenant `game_idx`
+par paire ; les deux scripts d'entraînement splittent par
+`GroupShuffleSplit` sur les parties, jamais sur les paires (le MLP passe
+même à un split à 3 niveaux train/val/test : les hyperparamètres sont
+choisis sur val, le test reste intact jusqu'au chiffre final). Dataset
+regénéré à 250 parties. Résultat honnête :
+
+| Modèle | Test R² | Test MAE |
+|---|---|---|
+| Linéaire (Ridge) | 0.075 | 7.23 pts |
+| MLP (meilleure config : h=(16,8), l2=0.3, la plus petite/régularisée) | **-0.030** | **7.98 pts** |
+
+**Le MLP n'apporte rien du tout une fois évalué honnêtement** -- il est
+même légèrement pire que le modèle linéaire. Le R²=0.70 précédent était
+presque entièrement un artefact de fuite de données, pas un vrai signal
+appris que le linéaire aurait raté. Pas la peine de retester en tête-à-tête
+contre B : le diagnostic hors ligne suffit, aucune config testée
+n'approche la précision du modèle linéaire actuel.
+
+Réponse à la question initiale ("dataset trop petit, ou mauvaises
+features ?") : ni l'un ni l'autre au sens propre -- les features
+suffisent (le linéaire les exploite déjà correctement), et plus de
+données n'aurait rien changé au symptôme (la fuite existait quelle que
+soit la taille du dataset, elle vient de la méthode de split, pas du
+volume). Le vrai plafond, confirmé maintenant plutôt que supposé : ces
+78 features, combinées linéairement, captent déjà l'essentiel du signal
+exploitable à cet horizon de prédiction -- une architecture plus riche
+n'aide pas sans features plus riches en amont.
 
 **Bilan des 3 tentatives d'amélioration du modèle de valeur cette
 session : toutes négatives.** MCTS pur (8/30), MLP absolu (2/30), MLP
-pairwise non linéaire (1/30) -- dans cet ordre, de moins en moins bon,
-alors que la sophistication du modèle augmente. **B reste, de loin, le
-bot le plus fort et le plus simple du dépôt.**
+pairwise non linéaire (jamais même arrivé au stade du test en partie,
+recalé hors ligne) -- **B reste, de loin, le bot le plus fort et le plus
+simple du dépôt.**

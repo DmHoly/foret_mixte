@@ -30,9 +30,18 @@ from pathlib import Path
 import joblib
 import numpy as np
 from scipy.optimize import minimize
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import GroupShuffleSplit
 
 HERE = Path(__file__).resolve().parent
+
+
+def _group_split(*arrays, groups, test_size, random_state):
+    idx_tr, idx_te = next(GroupShuffleSplit(
+        n_splits=1, test_size=test_size, random_state=random_state).split(arrays[0], groups=groups))
+    out = []
+    for a in arrays:
+        out += [a[idx_tr], a[idx_te]]
+    return out, groups[idx_tr]
 
 
 def _init_params(n_in, h1, h2, rng):
@@ -152,30 +161,56 @@ class PairwiseMLP:
         return out
 
 
+def _mae_r2(pred, y):
+    mae = float(np.mean(np.abs(pred - y)))
+    ss_res = float(np.sum((pred - y) ** 2))
+    ss_tot = float(np.sum((y - y.mean()) ** 2))
+    return mae, 1 - ss_res / ss_tot
+
+
 def main():
     data = np.load(HERE / "pairwise_dataset.npz", allow_pickle=True)
     Xa, Xb, yd = data["Xa"], data["Xb"], data["yd"]
     feature_names = list(data["feature_names"])
+    if "game_idx" not in data:
+        raise SystemExit("pairwise_dataset.npz sans game_idx -- regenerer avec "
+                          "gen_pairwise_dataset.py (version courante).")
+    groups = data["game_idx"]
 
-    Xa_tr, Xa_te, Xb_tr, Xb_te, y_tr, y_te = train_test_split(
-        Xa, Xb, yd, test_size=0.15, random_state=0)
+    # Split a 3 niveaux, TOUJOURS par partie (game_idx), jamais par paire :
+    # train (70%) pour l'optimisation, val (15%) pour choisir les
+    # hyperparametres, test (15%) laisse totalement intact jusqu'au chiffre
+    # final -- eviter de choisir les hyperparametres sur le meme jeu que
+    # celui qui sert a rapporter la performance (sinon on refait la meme
+    # fuite, une echelle au-dessus). Voir reference/MODELS.md (16/08) pour
+    # le diagnostic qui a motive ce changement.
+    (Xa_trval, Xa_te, Xb_trval, Xb_te, y_trval, y_te), groups_trval = _group_split(
+        Xa, Xb, yd, groups=groups, test_size=0.15, random_state=0)
+    (Xa_tr, Xa_val, Xb_tr, Xb_val, y_tr, y_val), _ = _group_split(
+        Xa_trval, Xb_trval, y_trval, groups=groups_trval, test_size=0.176, random_state=1)
+    print(f"train={len(y_tr)}  val={len(y_val)}  test={len(y_te)} paires "
+          f"({len(np.unique(groups))} parties)")
 
     best = None
-    for h1, h2 in [(32, 16), (64, 32)]:
-        for l2 in (1e-3, 1e-2, 3e-2):
+    for h1, h2 in [(16, 8), (32, 16), (64, 32)]:
+        for l2 in (1e-2, 3e-2, 1e-1, 3e-1):
             model = PairwiseMLP(Xa.shape[1], h1=h1, h2=h2, seed=0)
             model.fit(Xa_tr, Xb_tr, y_tr, l2=l2, maxiter=300)
-            pred = model.predict_diff(Xa_te, Xb_te)
-            mae = float(np.mean(np.abs(pred - y_te)))
-            ss_res = float(np.sum((pred - y_te) ** 2))
-            ss_tot = float(np.sum((y_te - y_te.mean()) ** 2))
-            r2 = 1 - ss_res / ss_tot
-            print(f"  h=({h1},{h2}) l2={l2:g}  R2={r2:.4f}  MAE={mae:.2f}")
-            if best is None or mae < best[0]:
-                best = (mae, r2, h1, h2, l2, model)
+            pred_val = model.predict_diff(Xa_val, Xb_val)
+            mae_val, r2_val = _mae_r2(pred_val, y_val)
+            print(f"  h=({h1},{h2}) l2={l2:g}  val R2={r2_val:.4f}  val MAE={mae_val:.2f}")
+            if best is None or mae_val < best[0]:
+                best = (mae_val, r2_val, h1, h2, l2)
 
-    mae, r2, h1, h2, l2, model = best
-    print(f"Meilleur : h=({h1},{h2}) l2={l2:g}  R2={r2:.4f}  MAE={mae:.2f} pts")
+    _, _, h1, h2, l2 = best
+    # Reentraine sur train+val avec les hyperparametres choisis, jamais
+    # touche au test avant ce point.
+    model = PairwiseMLP(Xa.shape[1], h1=h1, h2=h2, seed=0)
+    model.fit(Xa_trval, Xb_trval, y_trval, l2=l2, maxiter=300)
+    pred_te = model.predict_diff(Xa_te, Xb_te)
+    mae_te, r2_te = _mae_r2(pred_te, y_te)
+    print(f"Meilleur (choisi sur val) : h=({h1},{h2}) l2={l2:g}")
+    print(f"Test (jamais vu) : R2={r2_te:.4f}  MAE={mae_te:.2f} pts")
 
     out = HERE / "pairwise_mlp_model.joblib"
     joblib.dump({
