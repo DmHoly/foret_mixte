@@ -22,6 +22,7 @@ Ce fichier sert d'index pour ne pas s'y perdre.
 | `pairwise_model_pre_clairiere_forte.joblib`, `pairwise_dataset_pre_clairiere_forte.npz` | Le modèle contrastif tel qu'il était **avant** le premier réentraînement du 16/08 -- entraîné sous l'ancienne heuristique de Clairière (toujours la carte la moins chère). C'est ce modèle périmé qui faisait perdre MCTS+forte face à Greedy+forte (12/30) ; le réentraînement (voir `bench_heuristics.py`) fait remonter le taux de victoire à ~59%. Gardé pour pouvoir reproduire la comparaison avant/après. |
 | `pairwise_model_stale_backup.joblib`, `pairwise_dataset_stale_backup.npz` | Snapshot du 15/08 19h48, avant le réentraînement "sous les règles actuelles" de cette même journée (commit `233b14e`) -- prédate même l'ajout des features Clairière (`clearing_size`/`clearing_min_cost`) au vecteur de features. Conservé comme point de repère le plus ancien. |
 | `pairwise_model_true_original_aligned.joblib`, `pairwise_model_retrain1_no_clearing_aligned.joblib` | Paire de modèles produits lors de l'expérience "ajouter les features Clairière au modèle de valeur" (commit `013edbc`, 15/08 19h57) : le premier reprend l'entraînement d'origine réaligné sur le nouveau schéma de features (colonnes Clairière à zéro) pour servir de témoin, le second est réentraîné avec les features Clairière réellement peuplées. Résultat **nul** (l'ajout de ces features n'a pas amélioré le jeu de façon mesurable) -- gardés comme trace de la tentative, pas comme candidats à adopter. |
+| `bootstrap_dataset.npz`, `bootstrap_model.joblib` | Pilote du bootstrap MCTS façon AlphaZero (17/08, voir "Résultat du pilote" plus bas) : auto-jeu MCTS + cible = stats de l'arbre, au lieu d'auto-jeu greedy + rollout séparé. Résultat **négatif** au gating (perd contre le modèle officiel ET contre B) -- gardés comme trace, `pairwise_model.joblib` reste inchangé. |
 
 ## Comment regénérer le modèle vivant
 
@@ -387,3 +388,64 @@ propres résultats, sans nouvelle vérité extérieure).
 Si cette piste est tentée un jour, commencer petit (une seule génération
 de bootstrap, 30 parties, 50 itérations MCTS) pour valider que le
 principe fonctionne avant d'investir dans plusieurs générations.
+
+## Résultat du pilote (17/08) : négatif, gardé pour comparaison
+
+La piste ci-dessus a été codée et testée à l'échelle "pilote" recommandée
+(commencer petit). Trois scripts, réutilisant l'infrastructure existante
+plutôt que de la dupliquer :
+
+- `gen_bootstrap_dataset.py` : auto-jeu avec un `search.MCTS` persistant
+  par joueur (arbre réutilisé d'un tour à l'autre, `leaf_eval` = modèle
+  officiel `pairwise_model.joblib` via `make_pairwise_hybrid_leaf_eval`),
+  au lieu de la trajectoire `S.greedy_action` de `gen_pairwise_dataset.py`.
+  Cible d'entraînement = `child.value / child.visits` des actions
+  candidates au nœud racine (option 2 du plan ci-dessus, stats de l'arbre
+  plutôt qu'un rollout séparé), filtrées à `min_visits >= 3`.
+- `train_bootstrap_model.py` : réutilise `train_pairwise_model.fit_and_save`
+  (factorisée pour l'occasion, comportement par défaut inchangé) sur le
+  dataset bootstrap.
+- `bench_bootstrap.py` : gating tête-à-tête, même format que
+  `bench_heuristics.py` -- N (candidat bootstrap) vs O (officiel) vs B
+  (Greedy + Clairière forte, meilleur bot du dépôt).
+
+**Génération** : 30 parties, MCTS 50 itérations/décision -> 19841 paires
+en 107s (`reference/bootstrap_dataset.npz`).
+
+**Entraînement** (`reference/bootstrap_model.joblib`) : R² = 0,037, MAE en
+rang normalisé [0,1] = 0,14, **pire que la baseline "aucune différence"
+(0,13)**. Signal offline aussi faible que la toute première tentative de
+modèle contrastif (R²=0,045, sans le score exact en feature), bien en
+dessous du modèle officiel actuel (R²=0,17, `k_rollout=5`).
+
+**Gating** (`bench_bootstrap.py --n 20`, MCTS 150 it., même heuristique de
+Clairière forte des deux côtés) :
+
+| Match | Score | Écart moyen (SE) |
+|---|---|---|
+| N vs O | 5/20 | -3,0 (12,4) |
+| N vs B | 8/20 | -43,7 (24,2) |
+| O vs B | 11/20 | -23,6 (26,7) |
+
+**Le candidat N perd nettement contre le modèle officiel O en taux de
+victoire (5/20, ~25%, malgré un écart moyen non significatif) et contre B
+(8/20). Non promu : `reference/pairwise_model.joblib` reste le modèle
+officiel, inchangé.** `bootstrap_dataset.npz`/`bootstrap_model.joblib`
+gardés comme trace de la tentative (même philosophie que le reste de ce
+fichier), pas comme candidats.
+
+Diagnostic le plus probable : à 50 itérations MCTS réparties sur un
+facteur de branchement de plusieurs centaines d'actions (voir README), la
+plupart des candidats au nœud racine ne reçoivent que 3 à ~20 visites
+(observé en pratique) -- `child.value/child.visits` sur si peu
+d'observations est encore très bruité, probablement pas moins bruité que
+le rollout unique que `k_rollout` a justement été introduit pour
+corriger. Le "pilote minimal" recommandé par le plan ci-dessus semble
+trop petit pour que l'avantage théorique de la méthode (cible = jugement
+de la recherche complète, pas d'un seul rollout) se matérialise -- il
+faudrait soit beaucoup plus d'itérations MCTS par décision (coût
+multiplié d'autant), soit un `min_visits` sensiblement plus élevé (moins
+de paires exploitables par partie, donc plus de parties nécessaires pour
+un dataset de taille comparable). Piste non refermée : rejouer ce pilote
+à budget de calcul nettement supérieur avant de la considérer invalidée,
+pas juste mal exécutée à cette échelle.
