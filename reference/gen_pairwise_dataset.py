@@ -62,7 +62,12 @@ def _rollout_score(state, seed, depth, observer):
 
 def generate_pairs(n_games, seed0, k_candidates=4, depth=20, sample_every=4,
                     trajectory_epsilon=0.4):
-    Xd, yd = [], []
+    """Retourne (Xd, yd, Xa, Xb) : Xd/yd sont les diffs (voir train_pairwise_model.py,
+    modèle linéaire), Xa/Xb les features BRUTES (non soustraites) de chaque
+    moitié de paire, dans le même ordre -- nécessaires pour un modèle non
+    linéaire (train_pairwise_mlp.py) qui ne peut pas s'entraîner directement
+    sur la différence (MLP(a-b) != MLP(a)-MLP(b))."""
+    Xd, yd, Xa, Xb = [], [], [], []
     for gi in range(n_games):
         seed = seed0 + gi
         g = G.Game(n_players=2, seed=seed)
@@ -101,19 +106,23 @@ def generate_pairs(n_games, seed0, k_candidates=4, depth=20, sample_every=4,
                             fj = np.asarray(feats_by_action[aj], dtype=np.float32)
                             Xd.append(fi - fj)
                             yd.append(scores_by_action[ai] - scores_by_action[aj])
+                            Xa.append(fi)
+                            Xb.append(fj)
             action = S.greedy_action(g, traj_rng, epsilon=trajectory_epsilon)
             g.apply(action)
             turns += 1
-    return Xd, yd
+    return Xd, yd, Xa, Xb
 
 
 if __name__ == "__main__":
     n_games = int(sys.argv[1]) if len(sys.argv) > 1 else 150
 
-    Xd, yd = generate_pairs(n_games, seed0=30000)
+    Xd, yd, Xa, Xb = generate_pairs(n_games, seed0=30000)
     Xd = np.asarray(Xd, dtype=np.float32)
     yd = np.asarray(yd, dtype=np.float32)
+    Xa = np.asarray(Xa, dtype=np.float32)
+    Xb = np.asarray(Xb, dtype=np.float32)
     feature_names = list(F.FEATURE_NAMES) + ["raw_score"]
     out = Path(__file__).resolve().parent / "pairwise_dataset.npz"
-    np.savez_compressed(out, Xd=Xd, yd=yd, feature_names=np.array(feature_names))
+    np.savez_compressed(out, Xd=Xd, yd=yd, Xa=Xa, Xb=Xb, feature_names=np.array(feature_names))
     print(f"{n_games} parties -> {Xd.shape[0]} paires, {Xd.shape[1]} features -> {out}")
