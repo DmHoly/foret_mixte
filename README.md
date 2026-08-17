@@ -26,7 +26,7 @@ validé contre cette référence sur 1700 forêts aléatoires (`tests/test_rules
 
 ```bash
 pip install -r requirements.txt  # numpy, scikit-learn, joblib (pour reference/)
-python -m pytest tests/ -q       # 23 tests, dont 1700 forêts aléatoires
+python -m pytest tests/ -q       # 42 tests, dont 1700 forêts aléatoires
 ```
 
 Usage minimal du moteur :
@@ -366,10 +366,15 @@ prendre dans la Clairière reste une heuristique (`choose_draw_source`, prend
 la moins chère), pas une décision de l'arbre — l'exposer multiplierait le
 facteur de branchement sur l'action la plus fréquente de la partie.
 
+Le bonus de paiement par couleur (« bonus jumelles ») et les quatre
+champignons à effet permanent (Amanite tue-mouches, Cèpe de Bordeaux,
+Girolle, Coulemelle) sont entièrement câblés — voir
+`reference/cartes_effets.md` (catalogue carte par carte) et
+`reference/REFACTOR_PLAN.md` (historique du refactoring). Vérifié par
+`tests/test_rules.py` (12 tests dédiés à ces deux mécaniques).
+
 Non implémenté côté règles :
 
-- **Bonus de paiement par couleur** pour les cartes qui n'ont pas encore été
-  câblées, et **moteurs de pioche des champignons** restants.
 - **Paiement, et choix de la carte de Clairière à prendre, comme décisions de
   l'arbre** — aujourd'hui des heuristiques (`choose_payment`,
   `choose_draw_source`), pas des nœuds de recherche. C'est le plus gros trou
