@@ -43,7 +43,7 @@ import math
 import random
 
 from engine import TREE_ID
-from game import DWELLER, TREE, WINTER, Game, insert_winter_cards
+from game import DWELLER, TREE, WINTER, Game, insert_winter_cards, _is_strong_card
 
 C_PUCT = 1.4
 ROLLOUT_EPSILON = 0.25
@@ -56,6 +56,18 @@ ROLLOUT_EPSILON = 0.25
 # 15/08 sur demande de Mehdi).
 SYCAMORE_ROLLOUT_BONUS = {TREE_ID["SYCAMORE"]: 10.0}
 ROLLOUT_CANDIDATES = 8
+
+# Prime d'urgence Clairière (idée de Mehdi, session du 16/08) : sans elle,
+# `greedy_action` ne regarde JAMAIS la Clairière pour décider s'il joue une
+# carte de la main ou pioche -- il pose dès que `best_gain > 0`, même un
+# petit gain, laissant une carte forte visible en Clairière à la merci de
+# l'adversaire au tour suivant. La Clairière est une ressource partagée et
+# contestée (10 cartes max, débordement = perte définitive), contrairement
+# au delta immédiat d'une pose qui reste acquis qu'on la joue ce tour-ci ou
+# le suivant. Validé en tête-à-tête (greedy+urgence vs greedy nu, n=300,
+# 300 seeds) : ~61% de victoires, effet plateau au-delà de +20/+25 pts ; et
+# contre MCTS(150it) par défaut (n=30) : 19/30, écart moyen +65.5 pts.
+CLEARING_URGENCY_BONUS = 25.0
 
 
 def _fallback_action(game):
@@ -74,7 +86,7 @@ def _fallback_action(game):
 
 
 def greedy_action(game, rng, epsilon=0.0, candidates=None, tree_bonus=6,
-                   tree_combo_bonus=None):
+                   tree_combo_bonus=None, clearing_urgency=CLEARING_URGENCY_BONUS):
     """Coup maximisant le gain immédiat, avec un correctif d'ouverture.
 
     Un arbre ne rapporte presque rien à la pose mais ouvre 4 emplacements.
@@ -92,6 +104,15 @@ def greedy_action(game, rng, epsilon=0.0, candidates=None, tree_bonus=6,
     grossière appliquée à CHAQUE décision réelle). Ici la correction ne
     s'applique qu'aux coups simulés à l'intérieur d'un rollout tronqué,
     pas aux décisions réellement jouées.
+
+    `clearing_urgency` (voir `CLEARING_URGENCY_BONUS`) : contrairement à
+    `tree_combo_bonus`, celui-ci EST actif par défaut sur les décisions
+    réelles -- validé comme tel (pas seulement en rollout), voir la
+    docstring de la constante. Traite "piocher pour ramasser une carte
+    forte visible en Clairière" comme un candidat à gain fictif, mis en
+    concurrence avec les poses de la main : sans ça, `best_gain > 0` fait
+    toujours préférer poser une carte moyenne de la main plutôt que sécuriser
+    une carte forte contestée, qui peut disparaître au tour de l'adversaire.
     """
     actions = game.legal_actions()
     if len(actions) == 1:
@@ -128,6 +149,11 @@ def greedy_action(game, rng, epsilon=0.0, candidates=None, tree_bonus=6,
             forest.undo_dweller(tree_idx, pos, did)
         if gain > best_gain:
             best, best_gain = a, gain
+
+    if (clearing_urgency and ("draw",) in actions
+            and clearing_urgency > best_gain
+            and any(_is_strong_card(c) for c in game.clearing)):
+        return ("draw",)
 
     # Piocher est préférable si aucun coup ne rapporte et que la main respire.
     if best_gain <= 0 and len(player.hand) <= 7:
