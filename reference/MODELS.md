@@ -521,3 +521,50 @@ de paires exploitables par partie, donc plus de parties nécessaires pour
 un dataset de taille comparable). Piste non refermée : rejouer ce pilote
 à budget de calcul nettement supérieur avant de la considérer invalidée,
 pas juste mal exécutée à cette échelle.
+
+## Piste écartée : entraîner uniquement sur les états du joueur gagnant (17/08)
+
+Question de Mehdi : au lieu du modèle contrastif (comparer 2 coups depuis
+le même état), pourquoi ne pas regarder comment le bot qui GAGNE une
+partie s'y prend, et entraîner un modèle de valeur absolu à reproduire
+cette stratégie -- en ne gardant que les états du gagnant, pas ceux des
+deux joueurs comme le fait déjà `gen_value_dataset.py`/`train_value_model.py`.
+
+Testé dans `reference/winner_only_experiment.py` (diagnostic jetable, ne
+produit pas de fichier `.joblib`/`.npz` -- juste des métriques imprimées,
+à relancer au besoin) : 300 parties d'auto-jeu greedy bruité, modèle
+Ridge sur les features de `features.py`, comparé sur deux axes.
+
+**1. Offline** (le modèle sait-il prédire le gain restant ?) :
+
+| | R² test | MAE | baseline (moyenne) |
+|---|---|---|---|
+| Tous les joueurs | 0,083 | 93,0 | 101,5 |
+| Gagnant seulement | **-0,030** | 102,8 | 111,3 |
+
+Restreindre au gagnant fait **pire que la baseline** (R² négatif) : ça
+divise le dataset par deux (14204 snapshots au lieu de 29706) sans rien
+corriger au bruit de fond.
+
+**2. Ce qui compte pour MCTS** : capacité à ordonner deux coups candidats
+posés depuis le même état (vérité terrain = vrai écart mesuré par
+rollout court à graines communes, `reference/pairwise_dataset.npz`) :
+
+| | corrélation | accord de signe |
+|---|---|---|
+| Tous les joueurs | 0,036 | 56,8% |
+| Gagnant seulement | 0,031 | 56,0% |
+| *Repère : pairwise_model officiel (fit sur ces mêmes données, donc optimiste)* | *0,520* | *69,3%* |
+
+56% d'accord de signe ≈ pile ou face : les deux variantes du modèle
+absolu sont quasi incapables de départager deux coups voisins, très en
+dessous du modèle contrastif.
+
+**Conclusion, négative sur toute la ligne** : le problème n'est pas *quel
+joueur* on regarde, c'est que le score final d'une partie entière dépend
+de dizaines de pioches et de coups adverses après CHAQUE décision -- ce
+bruit de crédit-assignment noie le signal que la trajectoire vienne du
+gagnant ou non. C'est précisément ce que l'approche contrastive (comparer
+deux coups depuis le MÊME état, mêmes pioches ensuite via *common random
+numbers*) a été conçue pour corriger dès le départ -- voir la docstring
+de `gen_pairwise_dataset.py`. Piste écartée, pas de suite prévue.
