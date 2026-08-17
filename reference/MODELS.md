@@ -110,3 +110,41 @@ nouvelle heuristique de décision.
 **En pratique, B (`greedy_action` avec les deux heuristiques actives) est
 aujourd'hui le bot le plus fort du dépôt**, plus simple et bien plus
 rapide que MCTS.
+
+## Deux pistes "force brute" testées contre B, toutes deux négatives (16/08)
+
+Question de Mehdi : un MCTS sans heuristique, plus coûteux mais "plus
+pur", ne devrait-il pas battre B par force brute ? Deux variantes
+testées en tête-à-tête, résultat négatif dans les deux cas.
+
+**MCTS pur (`leaf_eval=None`, rollout réel profond à 90 coups au lieu du
+modèle appris)** : 1re partie gagnée par MCTS pur (355 vs 322, partie
+anormalement longue à 181 tours) -- mais sur n=30, **MCTS pur perd
+largement : 8/30 (27%)**, écart moyen -74.3 pts (SE 21.8). Le rollout
+reste guidé par `greedy_action`, mais avec 25% de coups purs aléatoires
+(`ROLLOUT_EPSILON`) déroulés sur ~80-180 coups jusqu'à la fin de partie :
+le bruit accumulé noie le signal du premier coup à évaluer, et 80
+itérations ne suffisent pas à le moyenner. Un raccourci (modèle appris +
+rollout court) donne une estimation moins chère ET plus fiable par
+itération, à budget de calcul comparable.
+
+**Modèle de valeur absolu (MLP) réentraîné sous les heuristiques actuelles**
+(voir section précédente : R²=0.945 mais MAE=19pts, pire que le modèle
+pairwise ~7.5pts) : encore plus net, **D avec ce modèle perd 2/30 (7%)**
+contre B, écart moyen -152.9 pts (SE 18.8) -- pire que le MCTS pur
+sans aucun modèle. Un modèle mal calibré pour la tâche (bon R² sur la
+magnitude globale, mauvais sur les écarts fins entre coups voisins)
+n'est pas juste inutile, il *biaise* activement la recherche vers de
+mauvaises branches -- pire qu'aucun modèle du tout.
+
+Conclusion des deux essais : le facteur limitant de MCTS sur ce jeu n'est
+ni le manque de profondeur de rollout ni le manque de "réalisme" de la
+simulation -- c'est la précision de l'évaluation de branches voisines à
+un même nœud. Un modèle linéaire modeste (R²≈0.10) mais correctement
+formulé pour cette tâche précise (diff de features -> diff de gain, voir
+`gen_pairwise_dataset.py`) bat largement un modèle bien plus expressif
+(MLP, R²≈0.95) mal formulé pour elle. Améliorer MCTS demanderait un
+modèle **pairwise non-linéaire** (donc reformuler la tâche : un MLP sur
+la différence de features ne se décompose pas en fonction de valeur par
+état comme le fait un modèle linéaire, voir la docstring de
+`gen_pairwise_dataset.py`) -- chantier plus lourd, pas tenté ici.
