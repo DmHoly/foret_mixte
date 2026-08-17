@@ -147,4 +147,38 @@ formulé pour cette tâche précise (diff de features -> diff de gain, voir
 modèle **pairwise non-linéaire** (donc reformuler la tâche : un MLP sur
 la différence de features ne se décompose pas en fonction de valeur par
 état comme le fait un modèle linéaire, voir la docstring de
-`gen_pairwise_dataset.py`) -- chantier plus lourd, pas tenté ici.
+`gen_pairwise_dataset.py`).
+
+## Troisième essai : modèle pairwise NON linéaire (réseau siamois, 16/08)
+
+Suite logique du constat ci-dessus : `train_pairwise_mlp.py` reformule
+la tâche correctement (même MLP appliqué séparément à chaque état
+comparé, entraîné pour que la différence de sortie approche le vrai
+delta -- voir la docstring du script pour le détail). Hors ligne, net
+progrès : **R²=0.70, MAE=4.2pts**, contre R²=0.10/MAE=7.5pts pour le
+modèle linéaire.
+
+En tête-à-tête contre B pourtant : **D avec ce modèle perd 1/30 (3%)**,
+écart moyen -148.9 pts (SE 21.1) -- aussi mauvais que le MLP absolu mal
+formulé, malgré une précision hors ligne bien supérieure au modèle
+linéaire qui, lui, tient la comparaison face à B (13-15/30).
+
+Explication la plus probable : le R²/MAE mesurés sont sur un jeu de test
+tiré de la **même distribution** que l'entraînement (self-play sous la
+politique gloutonne actuelle). MCTS explore délibérément des états HORS
+de cette distribution (c'est le rôle du terme d'exploration UCT) -- un
+réseau ReLU peut extrapoler de façon incontrôlée sur des entrées jamais
+vues (sorties arbitrairement grandes ou de mauvais signe), alors qu'un
+modèle linéaire reste "sage" même en extrapolation, structurellement
+incapable de produire un pic délirant. Être précis DANS la distribution
+d'entraînement ne protège pas d'être dangereusement faux HORS
+distribution -- précisément le régime où MCTS a le plus besoin d'un
+jugement fiable. Piste non testée pour confirmer : comparer les deux
+modèles avec `reference/diagnose_value_bias.py` (biais on-policy vs
+off-policy), conçu exactement pour ce diagnostic.
+
+**Bilan des 3 tentatives d'amélioration du modèle de valeur cette
+session : toutes négatives.** MCTS pur (8/30), MLP absolu (2/30), MLP
+pairwise non linéaire (1/30) -- dans cet ordre, de moins en moins bon,
+alors que la sophistication du modèle augmente. **B reste, de loin, le
+bot le plus fort et le plus simple du dépôt.**
