@@ -284,3 +284,106 @@ greedy -- un chantier de recherche à part entière, pas une correction
 incrémentale. **B (Greedy + ciblage carte forte + urgence Clairière)
 reste, avec une conviction plus forte que jamais, le meilleur bot du
 dépôt.**
+
+## Piste future (non implémentée) : bootstrap MCTS façon AlphaZero
+
+Documentée ici sur demande de Mehdi (16/08) -- explique la logique, les
+étapes et le pourquoi, mais **rien de ce qui suit n'est codé**. C'est un
+plan, pas un résultat.
+
+### Le problème exact que ça cible
+
+Toutes les tentatives précédentes entraînent le modèle de valeur sur des
+états issus d'un **auto-jeu greedy** (`S.greedy_action`, avec un peu de
+bruit `trajectory_epsilon`). Mais au moment où MCTS s'en sert vraiment,
+il ne se contente pas de suivre du greedy : son terme d'exploration UCT
+le pousse délibérément à visiter des branches qu'un joueur greedy
+n'atteindrait jamais (coups plus faibles en apparence, mais pas encore
+assez explorés pour être écartés avec confiance). Le modèle n'a jamais vu
+ces états à l'entraînement -- et le motif observé sur 6 tentatives
+suggère qu'un modèle mieux ajusté à SA distribution d'entraînement (donc
+plus confiant) devient plus dangereux, pas moins, quand on l'interroge
+en dehors de cette distribution. Améliorer le modèle SUR DES DONNÉES
+GREEDY ne peut donc pas résoudre un problème qui vient de la distribution
+elle-même, aussi précis que devienne le modèle sur cette distribution.
+
+### L'idée : faire coïncider distribution d'entraînement et distribution d'usage
+
+Au lieu d'entraîner sur "ce que ferait un joueur greedy", entraîner sur
+"ce que MCTS lui-même visite et conclut" -- en utilisant MCTS (avec le
+modèle courant) comme générateur de trajectoires ET comme source de
+cible, puis en réentraînant le modèle dessus, en boucle. C'est le
+principe d'AlphaZero/AlphaGo Zero : le réseau de valeur n'apprend jamais
+directement les règles du jeu, il apprend à imiter/anticiper ce que la
+recherche arborescente elle-même conclut après avoir cherché -- puis,
+une fois le réseau meilleur, la recherche devient meilleure aussi (elle
+part d'un a priori plus juste), ce qui produit des données d'entraînement
+encore meilleures au tour suivant. C'est un cercle vertueux, pas une
+correction ponctuelle -- d'où "bootstrap" (on s'auto-améliore par ses
+propres résultats, sans nouvelle vérité extérieure).
+
+### Étapes, adaptées à ce dépôt
+
+1. **Auto-jeu avec le MCTS courant** (au lieu de `S.greedy_action` dans
+   `gen_pairwise_dataset.py`) : faire jouer `search.MCTS` contre lui-même
+   (ou contre B, pour garder de la diversité), avec le modèle de valeur
+   actuel branché. Coût : MCTS est beaucoup plus lent que greedy (~7-8s
+   par partie contre <0.1s), donc moins de parties par génération que ce
+   qu'on fait aujourd'hui (150-250) -- probablement 30-50 pour commencer,
+   avec un nombre d'itérations réduit (50-80 au lieu de 150) pour tenir
+   dans un temps raisonnable.
+
+2. **Cible d'entraînement, deux options possibles** :
+   - Garder la même mécanique qu'aujourd'hui (paires de candidats à un
+     même nœud, rollout court à seed commune) mais échantillonner les
+     nœuds de départ le long d'une trajectoire **MCTS**, pas greedy --
+     correction minimale, ne change que la distribution des états visités.
+   - Plus proche d'AlphaZero : utiliser directement les statistiques de
+     l'arbre de recherche lui-même comme cible (`child.value / child.visits`
+     pour chaque action candidate à la racine, déjà calculé par
+     `MCTS.choose()`, gratuit à extraire) au lieu de relancer un rollout
+     séparé. C'est un vrai changement de méthode : le modèle apprend à
+     reproduire le jugement de la recherche complète (des centaines de
+     simulations) plutôt qu'un seul rollout tronqué -- cible bien moins
+     bruitée par construction, sans avoir besoin du `k_rollout` qu'on
+     vient d'introduire.
+
+3. **Réentraîner** le modèle sur ces nouvelles données (infrastructure
+   déjà là : `train_pairwise_model.py`/`train_pairwise_mlp.py`, split par
+   partie déjà corrigé).
+
+4. **Valider avant de promouvoir** : ne remplacer le modèle "officiel"
+   que si la nouvelle génération bat mesurablement l'ancienne ET B en
+   tête-à-tête (`bench_heuristics.py`) -- jamais sur la seule base d'une
+   métrique offline, exactement la leçon de cette session. C'est le
+   mécanisme de "gating" qu'AlphaGo Zero utilise aussi (un candidat ne
+   remplace le meilleur réseau que s'il le bat sur un vrai match).
+
+5. **Répéter** sur plusieurs générations jusqu'à stagnation ou victoire
+   nette contre B.
+
+### Pourquoi c'est un vrai chantier, pas une correction
+
+- **Coût de calcul multiplié** : chaque génération demande de générer des
+  parties avec MCTS (lent) plutôt que greedy (quasi gratuit), puis
+  réentraîner, puis valider en tête-à-tête -- et recommencer plusieurs
+  fois. Probablement des heures de calcul cumulées, pas des minutes.
+- **Risque d'instabilité** : le bootstrap peut osciller ou régresser
+  d'une génération à l'autre (over/under-fitting sur les données de LA
+  génération précédente) -- d'où l'étape de gating obligatoire, pas
+  optionnelle.
+- **Information imparfaite** : ce jeu cache la main adverse et l'ordre du
+  deck (`determinize()` dans `search.py`) -- la collecte de données doit
+  rester cohérente avec la vue déterminisée de l'observateur, pas fuiter
+  d'information cachée dans les features (sinon on retombe dans le piège
+  que `determinize()` a justement été conçu pour éviter).
+- **Aucune garantie de succès** : vu que 6 tentatives différentes ont
+  toutes échoué cette session avec un motif cohérent, il est possible que
+  même un bootstrap bien exécuté ne suffise pas sans aussi revoir
+  l'architecture (réseau de valeur ET de politique combinés, comme
+  AlphaZero, pas juste un scalaire de valeur) -- un chantier de plusieurs
+  itérations, pas un essai unique.
+
+Si cette piste est tentée un jour, commencer petit (une seule génération
+de bootstrap, 30 parties, 50 itérations MCTS) pour valider que le
+principe fonctionne avant d'investir dans plusieurs générations.
