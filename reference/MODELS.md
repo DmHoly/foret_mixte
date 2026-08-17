@@ -22,7 +22,8 @@ Ce fichier sert d'index pour ne pas s'y perdre.
 | `pairwise_model_pre_clairiere_forte.joblib`, `pairwise_dataset_pre_clairiere_forte.npz` | Le modèle contrastif tel qu'il était **avant** le premier réentraînement du 16/08 -- entraîné sous l'ancienne heuristique de Clairière (toujours la carte la moins chère). C'est ce modèle périmé qui faisait perdre MCTS+forte face à Greedy+forte (12/30) ; le réentraînement (voir `bench_heuristics.py`) fait remonter le taux de victoire à ~59%. Gardé pour pouvoir reproduire la comparaison avant/après. |
 | `pairwise_model_stale_backup.joblib`, `pairwise_dataset_stale_backup.npz` | Snapshot du 15/08 19h48, avant le réentraînement "sous les règles actuelles" de cette même journée (commit `233b14e`) -- prédate même l'ajout des features Clairière (`clearing_size`/`clearing_min_cost`) au vecteur de features. Conservé comme point de repère le plus ancien. |
 | `pairwise_model_true_original_aligned.joblib`, `pairwise_model_retrain1_no_clearing_aligned.joblib` | Paire de modèles produits lors de l'expérience "ajouter les features Clairière au modèle de valeur" (commit `013edbc`, 15/08 19h57) : le premier reprend l'entraînement d'origine réaligné sur le nouveau schéma de features (colonnes Clairière à zéro) pour servir de témoin, le second est réentraîné avec les features Clairière réellement peuplées. Résultat **nul** (l'ajout de ces features n'a pas amélioré le jeu de façon mesurable) -- gardés comme trace de la tentative, pas comme candidats à adopter. |
-| `bootstrap_dataset.npz`, `bootstrap_model.joblib` | Pilote du bootstrap MCTS façon AlphaZero (17/08, voir "Résultat du pilote" plus bas) : auto-jeu MCTS + cible = stats de l'arbre, au lieu d'auto-jeu greedy + rollout séparé. Résultat **négatif** au gating (perd contre le modèle officiel ET contre B) -- gardés comme trace, `pairwise_model.joblib` reste inchangé. |
+| `bootstrap_dataset_pilot1_50it.npz`, `bootstrap_model_pilot1_50it.joblib` | Pilote 1 du bootstrap MCTS façon AlphaZero (17/08, voir "Résultat du pilote 1" plus bas) : auto-jeu MCTS 50 it. + cible = stats de l'arbre, au lieu d'auto-jeu greedy + rollout séparé. Résultat **négatif** au gating (perd contre le modèle officiel ET contre B) -- gardés comme trace, `pairwise_model.joblib` reste inchangé. |
+| `bootstrap_dataset.npz`, `bootstrap_model.joblib` | Pilote 2, même méthode que le pilote 1 mais budget MCTS plus élevé -- voir "Résultat du pilote 2" plus bas pour le statut courant. |
 
 ## Comment regénérer le modèle vivant
 
@@ -389,7 +390,28 @@ Si cette piste est tentée un jour, commencer petit (une seule génération
 de bootstrap, 30 parties, 50 itérations MCTS) pour valider que le
 principe fonctionne avant d'investir dans plusieurs générations.
 
-## Résultat du pilote (17/08) : négatif, gardé pour comparaison
+## Critère de gating : deux paliers, pas un seul (17/08, précision de Mehdi)
+
+Le plan ci-dessus (étape 4) disait "ne remplacer le modèle officiel que
+si la nouvelle génération bat mesurablement l'ancienne ET B en
+tête-à-tête" -- formulation trop stricte pour une boucle censée
+s'améliorer génération après génération façon AlphaGo Zero. Dans
+AlphaGo Zero, le gating par génération ne compare le candidat qu'au
+**meilleur réseau courant** (O ici) ; battre une heuristique externe (B)
+n'est jamais un péage par génération, sous peine de ne jamais pouvoir
+démarrer la boucle. Deux paliers distincts, donc :
+
+- **Bat O** -> le candidat devient la nouvelle base d'auto-jeu pour la
+  génération suivante (la boucle avance), même s'il perd encore contre B.
+- **Bat O ET B** -> seuil de promotion en modèle "officiel"
+  (`reference/pairwise_model.joblib`, celui chargé par défaut) -- la
+  ligne d'arrivée, pas un prérequis à chaque étape intermédiaire.
+
+Tant qu'un candidat ne bat pas O, il n'y a pas de génération suivante à
+proprement parler : l'auto-jeu recommence depuis O avec un budget
+différent, ce n'est pas encore une chaîne bootstrap qui s'auto-améliore.
+
+## Résultat du pilote 1, 50 it. MCTS (17/08) : négatif, gardé pour comparaison
 
 La piste ci-dessus a été codée et testée à l'échelle "pilote" recommandée
 (commencer petit). Trois scripts, réutilisant l'infrastructure existante
@@ -410,9 +432,9 @@ plutôt que de la dupliquer :
   (Greedy + Clairière forte, meilleur bot du dépôt).
 
 **Génération** : 30 parties, MCTS 50 itérations/décision -> 19841 paires
-en 107s (`reference/bootstrap_dataset.npz`).
+en 107s (`reference/bootstrap_dataset_pilot1_50it.npz`).
 
-**Entraînement** (`reference/bootstrap_model.joblib`) : R² = 0,037, MAE en
+**Entraînement** (`reference/bootstrap_model_pilot1_50it.joblib`) : R² = 0,037, MAE en
 rang normalisé [0,1] = 0,14, **pire que la baseline "aucune différence"
 (0,13)**. Signal offline aussi faible que la toute première tentative de
 modèle contrastif (R²=0,045, sans le score exact en feature), bien en
@@ -429,10 +451,12 @@ Clairière forte des deux côtés) :
 
 **Le candidat N perd nettement contre le modèle officiel O en taux de
 victoire (5/20, ~25%, malgré un écart moyen non significatif) et contre B
-(8/20). Non promu : `reference/pairwise_model.joblib` reste le modèle
-officiel, inchangé.** `bootstrap_dataset.npz`/`bootstrap_model.joblib`
+(8/20). Ne franchit même pas le premier palier (bat O) : pas de
+génération suivante possible depuis ce candidat.**
+`bootstrap_dataset_pilot1_50it.npz`/`bootstrap_model_pilot1_50it.joblib`
 gardés comme trace de la tentative (même philosophie que le reste de ce
-fichier), pas comme candidats.
+fichier), pas comme candidats. Voir plus bas pour le pilote 2 (budget
+d'itérations plus élevé, même diagnostic testé).
 
 Diagnostic le plus probable : à 50 itérations MCTS réparties sur un
 facteur de branchement de plusieurs centaines d'actions (voir README), la

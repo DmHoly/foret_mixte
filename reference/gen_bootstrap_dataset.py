@@ -143,9 +143,11 @@ def generate_pairs(n_games, seed0, mcts_iterations=50, model_path=None,
 if __name__ == "__main__":
     n_games = int(sys.argv[1]) if len(sys.argv) > 1 else 30
     mcts_iterations = int(sys.argv[2]) if len(sys.argv) > 2 else 50
+    min_visits = int(sys.argv[3]) if len(sys.argv) > 3 else 3
 
     Xd, yd, Xa, Xb, game_idx = generate_pairs(
-        n_games, seed0=90000, mcts_iterations=mcts_iterations, verbose=True)
+        n_games, seed0=90000, mcts_iterations=mcts_iterations,
+        min_visits=min_visits, verbose=True)
     Xd = np.asarray(Xd, dtype=np.float32)
     yd = np.asarray(yd, dtype=np.float32)
     Xa = np.asarray(Xa, dtype=np.float32)
@@ -155,5 +157,5 @@ if __name__ == "__main__":
     out = Path(__file__).resolve().parent / "bootstrap_dataset.npz"
     np.savez_compressed(out, Xd=Xd, yd=yd, Xa=Xa, Xb=Xb, game_idx=game_idx,
                          feature_names=np.array(feature_names))
-    print(f"{n_games} parties MCTS ({mcts_iterations} it.) -> "
+    print(f"{n_games} parties MCTS ({mcts_iterations} it., min_visits={min_visits}) -> "
           f"{Xd.shape[0]} paires, {Xd.shape[1]} features -> {out}")
