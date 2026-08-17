@@ -9,7 +9,7 @@ from pathlib import Path
 import joblib
 import numpy as np
 from sklearn.linear_model import RidgeCV
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import GroupShuffleSplit
 
 HERE = Path(__file__).resolve().parent
 
@@ -19,7 +19,21 @@ def main():
     Xd, yd = data["Xd"], data["yd"]
     feature_names = list(data["feature_names"])
 
-    Xtr, Xte, ytr, yte = train_test_split(Xd, yd, test_size=0.15, random_state=0)
+    # Split AU NIVEAU DES PARTIES (game_idx), pas des paires : plusieurs
+    # paires viennent de la même partie (échantillonnées tous les
+    # sample_every tours), un split par paire laisse fuiter des paires
+    # corrélées entre train et test (voir gen_pairwise_dataset.py et
+    # reference/MODELS.md, diagnostiqué le 16/08 sur le modèle MLP -- moins
+    # critique ici vu la faible capacité du modèle linéaire, mais gardé
+    # cohérent avec train_pairwise_mlp.py).
+    if "game_idx" in data:
+        groups = data["game_idx"]
+        train_idx, test_idx = next(GroupShuffleSplit(
+            n_splits=1, test_size=0.15, random_state=0).split(Xd, yd, groups))
+        Xtr, Xte, ytr, yte = Xd[train_idx], Xd[test_idx], yd[train_idx], yd[test_idx]
+    else:
+        from sklearn.model_selection import train_test_split
+        Xtr, Xte, ytr, yte = train_test_split(Xd, yd, test_size=0.15, random_state=0)
 
     # fit_intercept=False : un décalage constant sur un état n'a de sens que
     # différencé (voir docstring de gen_pairwise_dataset.py), donc pas

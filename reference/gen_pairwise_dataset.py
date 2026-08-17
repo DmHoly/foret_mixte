@@ -61,8 +61,38 @@ def _rollout_score(state, seed, depth, observer):
 
 
 def generate_pairs(n_games, seed0, k_candidates=4, depth=20, sample_every=4,
-                    trajectory_epsilon=0.4):
-    Xd, yd = [], []
+                    trajectory_epsilon=0.4, k_rollout=1, progress_features=False):
+    """Retourne (Xd, yd, Xa, Xb, game_idx) : Xd/yd sont les diffs (voir
+    train_pairwise_model.py, modèle linéaire), Xa/Xb les features BRUTES
+    (non soustraites) de chaque moitié de paire, dans le même ordre --
+    nécessaires pour un modèle non linéaire (train_pairwise_mlp.py) qui ne
+    peut pas s'entraîner directement sur la différence (MLP(a-b) !=
+    MLP(a)-MLP(b)). `game_idx` (0-indexé, une valeur par paire) permet un
+    split train/test AU NIVEAU DES PARTIES plutôt que des paires : plusieurs
+    paires viennent de la MÊME partie (échantillonnées tous les
+    `sample_every` tours le long d'une trajectoire), un split au niveau des
+    paires laisse fuiter des paires très corrélées entre train et test --
+    un modèle à forte capacité (MLP) peut alors mémoriser des motifs propres
+    aux parties d'entraînement sans que ça se voie dans le score de
+    validation (diagnostiqué le 16/08, voir reference/MODELS.md).
+
+    `k_rollout` (défaut 1, rétrocompatible) : moyenne la cible sur K
+    rollouts indépendants par candidat au lieu d'une seule réalisation
+    bruitée -- chaque candidat d'un même nœud partage les mêmes K graines
+    (common random numbers), donc la propriété d'annulation de bruit
+    partagé entre candidats est préservée à chaque répétition, juste
+    moyennée K fois pour réduire le bruit résiduel propre à CE rollout.
+
+    `progress_features` (défaut False) : ajoute tours écoulés / cartes
+    restantes au deck / Hivers vus, en plus de `raw_score`. Exclues par
+    défaut de `features.py` pour le modèle ABSOLU (fuite d'horloge, voir
+    sa docstring) -- mais ici les deux candidats comparés partent du MÊME
+    tour, donc ces valeurs sont IDENTIQUES des deux côtés d'une paire et ne
+    peuvent pas encoder "on est loin dans la partie" de façon disproportionnée
+    d'un candidat à l'autre (Mehdi, 16/08 : comparaison à temps de partie
+    équivalent explicitement demandée).
+    """
+    Xd, yd, Xa, Xb, game_idx = [], [], [], [], []
     for gi in range(n_games):
         seed = seed0 + gi
         g = G.Game(n_players=2, seed=seed)
@@ -74,7 +104,7 @@ def generate_pairs(n_games, seed0, k_candidates=4, depth=20, sample_every=4,
                 cand_rng = random.Random(seed * 7919 + turns)
                 candidates = _candidate_actions(g, k_candidates, cand_rng)
                 if len(candidates) >= 2:
-                    common_seed = seed * 104729 + turns
+                    progress = [turns, len(g.deck), g.winters_seen] if progress_features else []
                     scores_by_action = {}
                     feats_by_action = {}
                     for a in candidates:
@@ -91,9 +121,13 @@ def generate_pairs(n_games, seed0, k_candidates=4, depth=20, sample_every=4,
                         # immédiat entre les deux coups, déjà calculé par le
                         # moteur, jamais bruité).
                         raw_score = branch.scores()[observer]
-                        feats_by_action[a] = F.extract_features(branch, observer) + [raw_score]
-                        scores_by_action[a] = _rollout_score(
-                            branch, common_seed, depth, observer)
+                        feats_by_action[a] = F.extract_features(branch, observer) + [raw_score] + progress
+                        vals = []
+                        for k in range(k_rollout):
+                            common_seed = seed * 104729 + turns * 1000 + k
+                            vals.append(_rollout_score(
+                                branch.clone(), common_seed, depth, observer))
+                        scores_by_action[a] = sum(vals) / k_rollout
                     for i in range(len(candidates)):
                         for j in range(i + 1, len(candidates)):
                             ai, aj = candidates[i], candidates[j]
@@ -101,19 +135,33 @@ def generate_pairs(n_games, seed0, k_candidates=4, depth=20, sample_every=4,
                             fj = np.asarray(feats_by_action[aj], dtype=np.float32)
                             Xd.append(fi - fj)
                             yd.append(scores_by_action[ai] - scores_by_action[aj])
+                            Xa.append(fi)
+                            Xb.append(fj)
+                            game_idx.append(gi)
             action = S.greedy_action(g, traj_rng, epsilon=trajectory_epsilon)
             g.apply(action)
             turns += 1
-    return Xd, yd
+    return Xd, yd, Xa, Xb, game_idx
 
 
 if __name__ == "__main__":
     n_games = int(sys.argv[1]) if len(sys.argv) > 1 else 150
+    k_rollout = int(sys.argv[2]) if len(sys.argv) > 2 else 5
 
-    Xd, yd = generate_pairs(n_games, seed0=30000)
+    # k_rollout=5 par defaut depuis le 16/08 : un seul rollout par candidat
+    # etait tellement bruite que R^2 restait plafonne a ~0.09 quelles que
+    # soient les features (diagnostique par Mehdi) ; moyenner 5 rollouts
+    # (common random numbers preservees a chaque repetition) fait monter
+    # R^2 a ~0.25 et fait baisser le MAE de ~40%, a features identiques.
+    # Voir reference/MODELS.md.
+    Xd, yd, Xa, Xb, game_idx = generate_pairs(n_games, seed0=30000, k_rollout=k_rollout)
     Xd = np.asarray(Xd, dtype=np.float32)
     yd = np.asarray(yd, dtype=np.float32)
+    Xa = np.asarray(Xa, dtype=np.float32)
+    Xb = np.asarray(Xb, dtype=np.float32)
+    game_idx = np.asarray(game_idx, dtype=np.int32)
     feature_names = list(F.FEATURE_NAMES) + ["raw_score"]
     out = Path(__file__).resolve().parent / "pairwise_dataset.npz"
-    np.savez_compressed(out, Xd=Xd, yd=yd, feature_names=np.array(feature_names))
+    np.savez_compressed(out, Xd=Xd, yd=yd, Xa=Xa, Xb=Xb, game_idx=game_idx,
+                         feature_names=np.array(feature_names))
     print(f"{n_games} parties -> {Xd.shape[0]} paires, {Xd.shape[1]} features -> {out}")

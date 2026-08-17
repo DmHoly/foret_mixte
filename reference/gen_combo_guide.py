@@ -359,6 +359,7 @@ TRUE_COMBO_CATS = {"combo", "auto-combo", "combo-binaire", "positionnel", "set"}
 NAV = """<nav class="pages" aria-label="Pages du guide">
   <a href="combo_guide.html" aria-current="{cur1}">Guide des combos</a>
   <a href="tactical_guide.html" aria-current="{cur2}">Guide tactique</a>
+  <a href="technique_guide.html" aria-current="{cur3}">Guide technique</a>
 </nav>"""
 
 
@@ -386,7 +387,8 @@ def render(agg):
 
     def page_shell(title, body, active):
         nav = NAV.format(cur1="page" if active == "combo" else "false",
-                          cur2="page" if active == "tactical" else "false")
+                          cur2="page" if active == "tactical" else "false",
+                          cur3="page" if active == "technique" else "false")
         return f"""<title>{title}</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
@@ -513,6 +515,66 @@ termes est vérifiée égale au score réel du moteur sur chaque forêt.</p>
   ({fmt(sycamore['greedy']['mean_if_realized'])} pts en moyenne quand il compte). Sous MCTS, son espérance
   grimpe encore ({fmt(sycamore['mcts']['expected_value'])} pts) : un jeu plus fort le pose plus tard, une
   fois la forêt déjà développée.</p>
+</section>
+
+<section aria-labelledby="marginal-values">
+  <h2 id="marginal-values">Combien vaut un tour, une carte, une pioche ciblée ?</h2>
+  <p class="section-note">Trois questions d'arbitrage qu'un tableau de combos seul ne tranche pas : combien
+  rapporte vraiment un rejeu de tour, une carte de plus en main, une pioche en Clairière — mesuré par
+  intervention isolée à <em>common random numbers</em> (on clone la partie à un instant T, on applique une
+  seule intervention différente sur chaque clone, le reste du deck ne bouge pas). Détail méthodologique et
+  code : <code>reference/marginal_value_experiments.py</code>.</p>
+
+  <h3 style="font-family:'Fraunces',Georgia,serif;font-size:1.1rem;margin:1.5rem 0 0.5rem;">
+    Empiler les Lièvres sur un Sapin blanc</h3>
+  <p>Le Sapin blanc ajoute <strong>+2 pts fixes par habitant empilé dessus</strong>, en plus du carré du
+  Lièvre — un bonus additif systématique, à coût nul, dès qu'un Sapin blanc est disponible.</p>
+  <div class="table-scroll">
+    <table class="ledger">
+      <caption>Empilement de Lièvres, Sapin blanc vs ailleurs</caption>
+      <thead><tr><th scope="col" class="num">Lièvres empilés</th><th scope="col" class="num">Sur Sapin blanc</th>
+        <th scope="col" class="num">Ailleurs (Hêtre)</th><th scope="col" class="num">Bonus du Sapin</th></tr></thead>
+      <tbody>
+        <tr><td class="num">3</td><td class="num">15</td><td class="num">9</td><td class="num expected">+6</td></tr>
+        <tr><td class="num">5</td><td class="num">35</td><td class="num">25</td><td class="num expected">+10</td></tr>
+        <tr><td class="num">7</td><td class="num">63</td><td class="num">49</td><td class="num expected">+14</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 style="font-family:'Fraunces',Georgia,serif;font-size:1.1rem;margin:1.5rem 0 0.5rem;">
+    Un rejeu de tour forcé (Geai des chênes)</h3>
+  <p>Le taux moyen de points par tour joué est d'environ 4,1 pts (régression sur trajectoires réelles) — un
+  chiffre facile à confondre avec « la valeur d'un rejeu ». Mesuré isolément, ce n'est pas le cas : forcer un
+  rejeu de Geai précisément quand greedy avait choisi autre chose est <strong>négatif</strong>, sur le score
+  absolu comme sur l'écart avec l'adversaire.</p>
+  <div class="stat-strip">
+    <div class="stat"><span class="label">Score absolu, si ça change le choix</span>
+      <span class="value delta-down">-4,5<span class="unit">pts</span></span></div>
+    <div class="stat"><span class="label">Écart avec l'adversaire, si ça change le choix</span>
+      <span class="value delta-down">-12,9<span class="unit">pts</span></span></div>
+  </div>
+  <p class="section-note">Le différentiel est encore plus négatif que le score absolu : forcer un rejeu ne
+  « vole » pas des tours à l'adversaire, ça consomme le deck partagé plus vite pour tout le monde (voir le
+  guide tactique). Le calcul de gain immédiat que fait déjà <code>greedy_action</code> — sans aucun crédit
+  explicite pour le rejeu à venir — est déjà une meilleure décision que de chasser activement le Geai.</p>
+
+  <h3 style="font-family:'Fraunces',Georgia,serif;font-size:1.1rem;margin:1.5rem 0 0.5rem;">
+    Une carte de plus en main : aveugle vs connue</h3>
+  <p>Une carte piochée à l'aveugle n'a pas de valeur fiable — trop de variance d'une partie à l'autre pour
+  qu'un chiffre moyen serve à quelque chose. Une carte <strong>connue et forte</strong> (le cas d'une pioche
+  ciblée en Clairière, contrairement au deck) est une autre histoire :</p>
+  <div class="stat-strip">
+    <div class="stat"><span class="label">Carte aveugle (deck)</span>
+      <span class="value">+3,3<span class="unit">pts (bruit, non significatif)</span></span></div>
+    <div class="stat"><span class="label">Carte connue forte (proxy Sycomore)</span>
+      <span class="value">+18,4<span class="unit">pts (net, ~4 erreurs-types)</span></span></div>
+  </div>
+  <p class="section-note">Conséquence directe : <code>choose_draw_source</code> (game.py) priorise désormais
+  une carte forte de la Clairière quand il y en a une (sinon la moins chère, comme avant) — validé en
+  tête-à-tête contre l'ancienne règle : 69/100 victoires en greedy (écart moyen +47,6 pts), 19/30 en MCTS
+  (écart moyen +56,5 pts). C'est un changement de comportement <em>naturel</em> du bot, pas une politique
+  forcée — voir le guide tactique pour la distinction, importante, entre les deux.</p>
 </section>
 """
 

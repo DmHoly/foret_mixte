@@ -111,7 +111,8 @@ def make_pairwise_leaf_eval(model_path=None):
     return leaf_eval
 
 
-def make_pairwise_hybrid_leaf_eval(model_path=None, short_rollout_depth=10, seed=None):
+def make_pairwise_hybrid_leaf_eval(model_path=None, short_rollout_depth=10, seed=None,
+                                    tree_combo_bonus=None):
     """Quelques coups réels (rollout court, comme `make_hybrid_leaf_eval`)
     suivis d'une évaluation par le modèle linéaire contrastif, au lieu
     d'appeler le modèle directement sur l'état de sélection/expansion brut
@@ -125,6 +126,11 @@ def make_pairwise_hybrid_leaf_eval(model_path=None, short_rollout_depth=10, seed
     laquelle il a été entraîné, en plus de laisser les coups réels
     différencier les branches (le rôle qu'ils jouent déjà dans
     `make_hybrid_leaf_eval`).
+
+    `tree_combo_bonus` (optionnel, {tree_id: bonus}) : voir
+    `search.greedy_action`/`search.rollout` -- corrige le biais d'horizon
+    du delta immédiat sur les arbres à valeur différée (ex. Sycomore)
+    PENDANT ce mini-rollout, pas dans les décisions réellement jouées.
     """
     weights, _names = load_pairwise_model(model_path)
     rng = random.Random(seed)
@@ -137,7 +143,8 @@ def make_pairwise_hybrid_leaf_eval(model_path=None, short_rollout_depth=10, seed
                 state.apply(actions[0])
             else:
                 state.apply(S.greedy_action(
-                    state, rng, S.ROLLOUT_EPSILON, S.ROLLOUT_CANDIDATES))
+                    state, rng, S.ROLLOUT_EPSILON, S.ROLLOUT_CANDIDATES,
+                    tree_combo_bonus=tree_combo_bonus))
             moves += 1
         scores_now = state.scores()
         if state.over:
@@ -177,5 +184,59 @@ def make_hybrid_leaf_eval(model_path=None, short_rollout_depth=18, seed=None):
             scores_now[i] + predict_remaining_gain(model, state, i)
             for i in range(len(state.players))
         ]
+
+    return leaf_eval
+
+
+def load_pairwise_mlp_model(path=None):
+    """Modèle de valeur contrastif NON linéaire (réseau siamois, voir
+    train_pairwise_mlp.py) : contrairement à `load_pairwise_model`, pas un
+    simple produit scalaire -- un petit MLP à 2 couches cachées, appliqué
+    séparément à chaque état comparé, entraîné pour que la différence de
+    ses deux sorties approche le vrai delta de gain observé."""
+    path = path or (HERE / "pairwise_mlp_model.joblib")
+    key = str(path)
+    if key not in _MODEL_CACHE:
+        bundle = joblib.load(path)
+        _MODEL_CACHE[key] = bundle
+    return _MODEL_CACHE[key]
+
+
+def _pairwise_mlp_forward(bundle, X):
+    params = bundle["params"]
+    mean, std = bundle["mean"], bundle["std"]
+    X_s = (np.atleast_2d(np.asarray(X, dtype=np.float64)) - mean) / std
+    W1, b1, W2, b2, W3, b3 = params
+    A1 = np.maximum(X_s @ W1 + b1, 0.0)
+    A2 = np.maximum(A1 @ W2 + b2, 0.0)
+    return (A2 @ W3 + b3).ravel()
+
+
+def make_pairwise_mlp_hybrid_leaf_eval(model_path=None, short_rollout_depth=10, seed=None):
+    """Équivalent de `make_pairwise_hybrid_leaf_eval`, avec le modèle
+    contrastif non linéaire (`pairwise_mlp_model.joblib`) au lieu du modèle
+    linéaire -- même principe (quelques coups réels avant l'évaluation, pour
+    rapprocher l'état de la distribution d'entraînement du modèle)."""
+    bundle = load_pairwise_mlp_model(model_path)
+    rng = random.Random(seed)
+
+    def leaf_eval(state):
+        moves = 0
+        while not state.over and moves < short_rollout_depth:
+            actions = state.legal_actions()
+            if len(actions) == 1:
+                state.apply(actions[0])
+            else:
+                state.apply(S.greedy_action(
+                    state, rng, S.ROLLOUT_EPSILON, S.ROLLOUT_CANDIDATES))
+            moves += 1
+        scores_now = state.scores()
+        if state.over:
+            return [float(s) for s in scores_now]
+        out = []
+        for i in range(len(state.players)):
+            feats = F.extract_features(state, i) + [scores_now[i]]
+            out.append(float(_pairwise_mlp_forward(bundle, feats)[0]))
+        return out
 
     return leaf_eval
