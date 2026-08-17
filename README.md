@@ -69,7 +69,8 @@ python bench.py mcts_pairwise_hybrid 300 8 10       # MCTS (config recommandée)
 | `run_narrated_hybrid.py` | Rejoue une partie MCTS coup par coup (main, alternatives explorées, score). |
 | `run_stats_hybrid.py` | Statistiques agrégées (fréquence de jeu par carte) sur N parties MCTS. |
 | `reference/value_policy.py` | Fonctions d'évaluation de feuille (`leaf_eval`) pour MCTS. |
-| `reference/gen_pairwise_dataset.py`, `train_pairwise_model.py` | Génère et entraîne le modèle de valeur contrastif (`pairwise_model.joblib`). |
+| `reference/gen_pairwise_dataset.py`, `train_pairwise_model.py` | Génère et entraîne le modèle de valeur contrastif linéaire (`pairwise_model.joblib`, celui utilisé par défaut). |
+| `reference/train_pairwise_mlp.py` | Variante non linéaire (réseau siamois) du modèle contrastif -- testée et non retenue, voir `reference/MODELS.md`. |
 | `reference/MODELS.md` | Index des fichiers `.joblib`/`.npz` de `reference/` : lequel est chargé par défaut, lesquels sont des sauvegardes historiques et pourquoi. |
 | `reference/card_strength.py`, `card_strength_mcts.py` | Force intrinsèque des cartes par retrait contrefactuel. |
 | `reference/features.py`, `gen_value_dataset.py`, `train_value_model.py` | Modèle de valeur absolu (MLP), voir [limitations](#fonctions-de-valeur-pour-mcts). |
