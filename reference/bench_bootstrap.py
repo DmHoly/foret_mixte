@@ -1,17 +1,23 @@
-"""Gating du modèle bootstrap (reference/bootstrap_model.joblib, voir
-gen_bootstrap_dataset.py / train_bootstrap_model.py) : ne JAMAIS le
-promouvoir comme modèle par défaut sur la seule foi de son R²/MAE offline
-(la leçon centrale de reference/MODELS.md) -- il doit d'abord battre
-mesurablement le modèle "officiel" actuel ET le meilleur bot glouton du
-dépôt (B, Greedy + Clairière forte) en tête-à-tête réel. C'est le
-mécanisme de "gating" qu'AlphaGo Zero utilise aussi (un candidat ne
+"""Gating des candidats bootstrap (reference/bootstrap_model.joblib et,
+depuis le pilote 3, reference/policy_model.joblib) : ne JAMAIS les
+promouvoir comme modèle(s) par défaut sur la seule foi de leur R²/MAE
+offline (la leçon centrale de reference/MODELS.md) -- ils doivent d'abord
+battre mesurablement le modèle "officiel" actuel ET le meilleur bot
+glouton du dépôt (B, Greedy + Clairière forte) en tête-à-tête réel. C'est
+le mécanisme de "gating" qu'AlphaGo Zero utilise aussi (un candidat ne
 remplace le meilleur réseau que s'il le bat sur un vrai match).
 
 Trois variantes comparées, même heuristique de Clairière (forte, le
-défaut du module) pour isoler l'effet du SEUL modèle de valeur :
-  N = MCTS + reference/bootstrap_model.joblib (candidat, auto-jeu MCTS)
-  O = MCTS + reference/pairwise_model.joblib  (officiel actuel, auto-jeu greedy)
-  B = Greedy + Clairière forte                (meilleur bot glouton du dépôt)
+défaut du module) pour isoler l'effet du SEUL changement testé :
+  N = MCTS + PUCT (reference/policy_model.joblib comme prior) + évaluation
+      directe par reference/bootstrap_model.joblib (SANS rollout -- voir
+      value_policy.make_pairwise_leaf_eval). Candidat "pilote 3" : sans
+      heuristique câblée dans l'évaluation, chaque action légale reste
+      dans l'arbre (rien n'est filtré, voir search.Node.uct_select).
+  O = MCTS + reference/pairwise_model.joblib, UCT nu + rollout court via
+      greedy_action (configuration "officielle" actuelle, celle utilisée
+      par défaut ailleurs dans le dépôt).
+  B = Greedy + Clairière forte (meilleur bot glouton du dépôt).
 
 Usage :
     python reference/bench_bootstrap.py            # tournoi complet (3 matchs)
@@ -33,33 +39,50 @@ import value_policy as VP
 HERE = Path(__file__).resolve().parent
 
 
-def _make_mcts(seat, seed, model_path, iterations=150, short_rollout_depth=10):
+def _make_official_mcts(seat, seed, iterations, short_rollout_depth=10):
+    """O : configuration officielle actuelle -- UCT nu, leaf_eval hybride
+    (quelques coups réels via greedy_action, heuristique, puis modèle)."""
     return MCTS(observer=seat, iterations=iterations, seed=seed, rollout_depth=40,
                 leaf_eval=VP.make_pairwise_hybrid_leaf_eval(
-                    model_path=model_path,
                     short_rollout_depth=short_rollout_depth, seed=seed))
 
 
+def _make_policy_puct_mcts(seat, seed, iterations):
+    """N : PUCT guidé par policy_model.joblib, évaluation directe (sans
+    rollout) par bootstrap_model.joblib -- aucune heuristique câblée dans
+    la boucle de décision de CE bot (choose_draw_source/choose_payment
+    restent heuristiques pour les deux bots, hors scope, voir
+    gen_bootstrap_dataset.py)."""
+    return MCTS(observer=seat, iterations=iterations, seed=seed,
+                leaf_eval=VP.make_pairwise_leaf_eval(
+                    model_path=HERE / "bootstrap_model.joblib"),
+                policy_prior=VP.make_policy_prior(HERE / "policy_model.joblib"))
+
+
 VARIANTS = {
-    "N": ("mcts", HERE / "bootstrap_model.joblib", "MCTS + modèle bootstrap (candidat)"),
-    "O": ("mcts", HERE / "pairwise_model.joblib", "MCTS + modèle officiel"),
-    "B": ("greedy", None, "Greedy + Clairière forte"),
+    "N": ("mcts_policy_puct", "MCTS + PUCT (policy_model) + valeur pure (bootstrap_model), sans heuristique dans l'évaluation"),
+    "O": ("mcts_official", "MCTS + modèle officiel (UCT nu + rollout court heuristique)"),
+    "B": ("greedy", "Greedy + Clairière forte"),
+}
+
+_MAKERS = {
+    "mcts_policy_puct": _make_policy_puct_mcts,
+    "mcts_official": _make_official_mcts,
 }
 
 
 def play_one(seed, seat_of_first, label_first, label_second, iterations):
-    policy_first, model_first, _ = VARIANTS[label_first]
-    policy_second, model_second, _ = VARIANTS[label_second]
+    kind_first, _ = VARIANTS[label_first]
+    kind_second, _ = VARIANTS[label_second]
     game = Game(n_players=2, seed=seed)
-    policy = {seat_of_first: policy_first, 1 - seat_of_first: policy_second}
-    model_path = {seat_of_first: model_first, 1 - seat_of_first: model_second}
-    bots = {s: _make_mcts(s, seed * 31 + s, model_path[s], iterations=iterations)
-            for s in (0, 1) if policy[s] == "mcts"}
+    kind = {seat_of_first: kind_first, 1 - seat_of_first: kind_second}
+    bots = {s: _MAKERS[kind[s]](s, seed * 31 + s, iterations)
+            for s in (0, 1) if kind[s] != "greedy"}
 
     turns = 0
     while not game.over and turns < 600:
         seat = game.current
-        action = bots[seat].choose(game) if policy[seat] == "mcts" else greedy_action(game, None)
+        action = bots[seat].choose(game) if seat in bots else greedy_action(game, None)
         game.apply(action)
         for b in bots.values():
             b.advance(action)
@@ -111,13 +134,15 @@ def main():
     args = parser.parse_args()
     n = 8 if args.quick else args.n
 
-    if not (HERE / "bootstrap_model.joblib").exists():
-        print("reference/bootstrap_model.joblib introuvable -- lancer d'abord "
-              "gen_bootstrap_dataset.py puis train_bootstrap_model.py.", file=sys.stderr)
-        sys.exit(1)
+    for needed in ("bootstrap_model.joblib", "policy_model.joblib"):
+        if not (HERE / needed).exists():
+            print(f"reference/{needed} introuvable -- lancer d'abord "
+                  "gen_bootstrap_dataset.py puis train_bootstrap_model.py/"
+                  "train_policy_model.py.", file=sys.stderr)
+            sys.exit(1)
 
     print("Variantes :")
-    for k, (policy, _model, desc) in VARIANTS.items():
+    for k, (_kind, desc) in VARIANTS.items():
         print(f"  {k} = {desc}")
     print()
 
@@ -129,8 +154,9 @@ def main():
         results.append(r)
 
     print()
-    print("Verdict gating : le candidat N doit battre O ET B pour etre promu "
-          "(remplacer reference/pairwise_model.joblib) -- jamais sur la seule "
+    print("Verdict gating (deux paliers, voir reference/MODELS.md) : N bat O "
+          "-> devient la base d'auto-jeu de la prochaine generation ; N bat O "
+          "ET B -> seuil de promotion en modele officiel. Jamais sur la seule "
           "base du R^2/MAE offline.")
 
 
