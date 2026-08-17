@@ -221,3 +221,66 @@ session : toutes négatives.** MCTS pur (8/30), MLP absolu (2/30), MLP
 pairwise non linéaire (jamais même arrivé au stade du test en partie,
 recalé hors ligne) -- **B reste, de loin, le bot le plus fort et le plus
 simple du dépôt.**
+
+## Quatrième essai : réduire le bruit de la cible (k_rollout), 16/08
+
+Nouvelle question de Mehdi face à l'échec ci-dessus : dataset trop
+petit, ou mauvaises features ? Ni l'un ni l'autre -- diagnostic
+(`noise_vs_features_experiment.py`, scratchpad) : la cible de chaque
+paire venait d'un SEUL rollout de 20 coups (25% de hasard dedans,
+`ROLLOUT_EPSILON`), pas d'une moyenne. Moyenner 5 rollouts par candidat
+(mêmes graines communes préservées à chaque répétition, donc l'annulation
+de bruit entre candidats d'un même nœud tient toujours) : **R²
+0.089->0.249, MAE 7.72->4.54** à features identiques, sur un échantillon
+contrôlé. k=10 n'apporte pas de gain net mesuré en plus. Testé aussi :
+features de progression (tours écoulés/deck restant/Hivers vus, sûres
+pour le pairwise car identiques des deux côtés d'une paire au même tour)
+-- **mathématiquement inertes pour le modèle linéaire** : `Xd = featA -
+featB` annule exactement toute feature partagée par les deux candidats,
+donc `RidgeCV` leur assigne un poids nul par construction (vérifié :
+résultat strictement identique avec/sans, à graine de dataset égale).
+
+`gen_pairwise_dataset.py` passe `k_rollout=5` par défaut ; dataset
+officiel régénéré (250 parties). Réentraînement :
+
+| Modèle | Test R² | Test MAE |
+|---|---|---|
+| Linéaire (k=5) | **0.254** | **4.50** (meilleur jamais mesuré) |
+| MLP (k=5, split honnête) | 0.192 | 4.86 (toujours pire que le linéaire) |
+
+**Mais en tête-à-tête contre B, D avec ce modèle linéaire amélioré perd
+encore PLUS largement qu'avant : 9/30 (30%), écart -77.1 (SE 22.7)** --
+contre 13-15/30 pour l'ancien modèle plus bruité (k=1, moins régularisé
+que jamais : alpha=4.28 contre alpha=7.85 avant).
+
+## Motif qui se confirme sur 6 tentatives : mieux hors ligne = pire en jeu
+
+| Tentative | Offline (R²/MAE) | Vs B en vrai |
+|---|---|---|
+| Linéaire original (k=1) | 0.075 / 7.23 | 13-15/30 |
+| MCTS pur (sans modèle) | -- | 8/30 |
+| MLP absolu | 0.945 / 19.0 (biaisé, cible mal formulée) | 2/30 |
+| MLP pairwise (fuite train/test) | 0.70 / 4.2 (faux) | 1/30 |
+| MLP pairwise (split honnête) | -0.03 / 7.98 | (pas testé, déjà pire hors ligne) |
+| Linéaire, k=5 (meilleur hors ligne mesuré) | 0.254 / 4.50 | **9/30 (pire qu'avant)** |
+
+Aucune amélioration mesurée hors ligne ne s'est jamais traduite par une
+meilleure performance réelle contre B -- au contraire, plus le modèle
+est précis SUR SA DISTRIBUTION D'ENTRAÎNEMENT (auto-jeu greedy), plus il
+semble se dégrader en jeu réel. Hypothèse retenue : un modèle mieux
+ajusté à cette distribution devient plus confiant, donc plus dangereux,
+sur les branches hors-distribution que MCTS explore délibérément (terme
+d'exploration UCT) -- un modèle imprécis mais "prudent" (fortement
+régularisé) semble égarer moins la recherche qu'un modèle précis mais
+surconfiant hors de ce qu'il a vu à l'entraînement.
+
+**Conclusion de cette branche d'investigation (6 tentatives, toutes
+négatives, motif cohérent) : améliorer le modèle de valeur en optimisant
+sa précision offline n'est pas la bonne piste pour faire progresser MCTS
+sur ce jeu.** Une vraie percée demanderait une méthode différente --
+entraîner sur des états réellement visités par la recherche MCTS
+elle-même (bootstrap itératif façon AlphaZero), pas sur de l'auto-jeu
+greedy -- un chantier de recherche à part entière, pas une correction
+incrémentale. **B (Greedy + ciblage carte forte + urgence Clairière)
+reste, avec une conviction plus forte que jamais, le meilleur bot du
+dépôt.**
