@@ -71,7 +71,7 @@ python bench.py mcts_pairwise_hybrid 300 8 10       # MCTS (config recommandée)
 | `reference/value_policy.py` | Fonctions d'évaluation de feuille (`leaf_eval`) pour MCTS. |
 | `reference/gen_pairwise_dataset.py`, `train_pairwise_model.py` | Génère et entraîne le modèle de valeur contrastif linéaire (`pairwise_model.joblib`, celui utilisé par défaut). |
 | `reference/train_pairwise_mlp.py` | Variante non linéaire (réseau siamois) du modèle contrastif -- testée et non retenue, voir `reference/MODELS.md`. |
-| `reference/gen_bootstrap_dataset.py`, `train_bootstrap_model.py`, `bench_bootstrap.py` | Pilote de bootstrap MCTS façon AlphaZero (auto-jeu MCTS + cible = stats de l'arbre, au lieu d'auto-jeu greedy + rollout) -- testé et non retenu (perd le gating contre le modèle officiel et contre B), voir `reference/MODELS.md`. |
+| `reference/gen_bootstrap_dataset.py`, `train_bootstrap_model.py`, `bench_bootstrap.py` | Pilote de bootstrap MCTS façon AlphaZero (auto-jeu MCTS + cible = stats de l'arbre, au lieu d'auto-jeu greedy + rollout) -- 2 itérations testées, progrès net entre les deux (quasi-parité contre B au 2e essai) mais **pas encore promu** (ne bat pas encore le modèle officiel), voir `reference/MODELS.md`. |
 | `reference/MODELS.md` | Index des fichiers `.joblib`/`.npz` de `reference/` : lequel est chargé par défaut, lesquels sont des sauvegardes historiques et pourquoi. |
 | `reference/card_strength.py`, `card_strength_mcts.py` | Force intrinsèque des cartes par retrait contrefactuel. |
 | `reference/features.py`, `gen_value_dataset.py`, `train_value_model.py` | Modèle de valeur absolu (MLP), voir [limitations](#fonctions-de-valeur-pour-mcts). |

@@ -23,7 +23,7 @@ Ce fichier sert d'index pour ne pas s'y perdre.
 | `pairwise_model_stale_backup.joblib`, `pairwise_dataset_stale_backup.npz` | Snapshot du 15/08 19h48, avant le réentraînement "sous les règles actuelles" de cette même journée (commit `233b14e`) -- prédate même l'ajout des features Clairière (`clearing_size`/`clearing_min_cost`) au vecteur de features. Conservé comme point de repère le plus ancien. |
 | `pairwise_model_true_original_aligned.joblib`, `pairwise_model_retrain1_no_clearing_aligned.joblib` | Paire de modèles produits lors de l'expérience "ajouter les features Clairière au modèle de valeur" (commit `013edbc`, 15/08 19h57) : le premier reprend l'entraînement d'origine réaligné sur le nouveau schéma de features (colonnes Clairière à zéro) pour servir de témoin, le second est réentraîné avec les features Clairière réellement peuplées. Résultat **nul** (l'ajout de ces features n'a pas amélioré le jeu de façon mesurable) -- gardés comme trace de la tentative, pas comme candidats à adopter. |
 | `bootstrap_dataset_pilot1_50it.npz`, `bootstrap_model_pilot1_50it.joblib` | Pilote 1 du bootstrap MCTS façon AlphaZero (17/08, voir "Résultat du pilote 1" plus bas) : auto-jeu MCTS 50 it. + cible = stats de l'arbre, au lieu d'auto-jeu greedy + rollout séparé. Résultat **négatif** au gating (perd contre le modèle officiel ET contre B) -- gardés comme trace, `pairwise_model.joblib` reste inchangé. |
-| `bootstrap_dataset.npz`, `bootstrap_model.joblib` | Pilote 2, même méthode que le pilote 1 mais budget MCTS plus élevé -- voir "Résultat du pilote 2" plus bas pour le statut courant. |
+| `bootstrap_dataset.npz`, `bootstrap_model.joblib` | Pilote 2 du bootstrap MCTS (17/08, voir "Résultat du pilote 2" plus bas) : même méthode que le pilote 1 mais budget MCTS triplé (150 it.) et `min_visits` relevé (5). Progrès net (R² doublé, quasi-parité contre B) mais **pas encore promu** (ne bat pas encore O) -- gardés comme trace/point de départ pour une éventuelle suite, `pairwise_model.joblib` reste inchangé. |
 
 ## Comment regénérer le modèle vivant
 
@@ -458,7 +458,55 @@ gardés comme trace de la tentative (même philosophie que le reste de ce
 fichier), pas comme candidats. Voir plus bas pour le pilote 2 (budget
 d'itérations plus élevé, même diagnostic testé).
 
-Diagnostic le plus probable : à 50 itérations MCTS réparties sur un
+## Résultat du pilote 2, 150 it. MCTS, min_visits=5 (17/08) : progrès net, pas encore promu
+
+Même méthode que le pilote 1, budget d'itérations triplé (50 -> 150) et
+`min_visits` relevé (3 -> 5), pour tester directement le diagnostic
+ci-dessous : est-ce que le signal négatif du pilote 1 venait du bruit sur
+`child.value/child.visits` à faible nombre de visites par candidat ?
+
+**Génération** : 30 parties, 62450 paires en 479s
+(`reference/bootstrap_dataset.npz`) -- 3x plus de paires que le pilote 1
+malgré un seuil `min_visits` plus strict : à 150 it., beaucoup plus de
+candidats au nœud racine atteignent le seuil, comme prévu.
+
+**Entraînement** (`reference/bootstrap_model.joblib`) : R² = 0,071 (contre
+0,037 au pilote 1, **doublé**), MAE = 0,12, **à hauteur de la baseline**
+"aucune différence" (0,12 vs 0,12 -- au pilote 1 le modèle était pire que
+cette baseline). Toujours net en dessous du modèle officiel (R²=0,17),
+mais la direction du diagnostic est confirmée.
+
+**Gating** (`bench_bootstrap.py --n 20 --iterations 300`, budget doublé
+par rapport au pilote 1 pour laisser une vraie chance face à B) :
+
+| Match | Score | Écart moyen (SE) |
+|---|---|---|
+| N vs O | 7/20 | -15,8 (10,8) |
+| N vs B | 9/20 (2 nuls) | -12,8 (13,6) |
+| O vs B | 13/20 | -40,7 (27,8) |
+
+**Toujours pas de promotion** (le palier 1 -- battre O -- n'est pas
+franchi : 7/20, écart non significatif mais négatif), **mais progrès net
+et cohérent sur tous les axes mesurés** par rapport au pilote 1 :
+
+- N vs O : taux de victoire 25% -> 35% (5/20 -> 7/20)
+- N vs B : de "perd nettement" (8/20, -43,7) à **quasi-parité
+  statistique** (9/20, 2 nuls, écart -12,8 à moins d'1 SE de zéro) --
+  le candidat bootstrap approche la force du meilleur bot du dépôt, un
+  seuil non trivial, sans jamais voir un seul rollout dessus (les cibles
+  viennent uniquement de sa propre recherche arborescente).
+
+Verdict : le diagnostic du pilote 1 (cible trop bruitée à faible budget
+d'itérations) est confirmé -- augmenter le budget d'itérations MCTS de la
+génération améliore mesurablement le signal, sur l'offline ET en jeu réel.
+La piste bootstrap n'est pas invalidée ; elle demande probablement encore
+plus de budget (itérations MCTS et/ou parties d'auto-jeu) pour franchir le
+premier palier (battre O) et ouvrir une vraie chaîne de générations.
+Prochaine étape suggérée si cette piste est reprise : remonter encore le
+budget d'itérations (300+?) et/ou le nombre de parties, en acceptant le
+coût de calcul croissant en conséquence.
+
+Diagnostic (pilote 1) le plus probable : à 50 itérations MCTS réparties sur un
 facteur de branchement de plusieurs centaines d'actions (voir README), la
 plupart des candidats au nœud racine ne reçoivent que 3 à ~20 visites
 (observé en pratique) -- `child.value/child.visits` sur si peu
