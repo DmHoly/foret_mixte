@@ -73,3 +73,40 @@ Deux points notables par rapport au tournoi avec l'ancien modèle (D à
   (l'heuristique faible n'est plus utilisée nulle part par défaut), mais
   c'est une bonne illustration du principe : un modèle de valeur n'est
   fiable que sur les états qui ressemblent à ceux vus à l'entraînement.
+
+## Mise à jour (16/08, après l'urgence Clairière dans `greedy_action`)
+
+L'ajout de `CLEARING_URGENCY_BONUS` (voir `search.py`) a de nouveau périmé
+`pairwise_model.joblib` (même mécanisme, nouvelle cause) : classement de D
+tombé à 51.1%. Réentraînement identique à la procédure ci-dessus. Nouveau
+tournoi :
+
+| Match | Score | Écart moyen (SE) | Médiane |
+|---|---|---|---|
+| B vs A | 67/100 | +52.1 (9.7) | +54.0 |
+| D vs C | 21/30 | +44.7 (13.2) | +21.0 |
+| B vs C | 25/30 | +109.9 (21.8) | +69.5 |
+| D vs B | 13/30 | -40.4 (16.4) | -4.5 |
+| D vs A | 15/30 (nul) | -2.4 (14.3) | +2.5 |
+| C vs A | 14/30 (nul) | -24.8 (14.8) | -4.0 |
+
+Classement agrégé : **B 67.5%, D 54.4%, A 39.4%, C 30.0%**.
+
+Contrairement à la fois précédente, le réentraînement ne ramène **pas**
+D vs B à la parité (13/30, plutôt pire qu'avant : 15/30). Sur trois
+tournois consécutifs (avec trois modèles différents), **B (Greedy +
+Clairière forte + urgence) bat systématiquement D (MCTS)** en tête-à-tête
+direct, alors que D domine largement C et A. Hypothèse la plus probable :
+ce n'est plus un problème de distribution périmée (déjà corrigé) mais un
+plafond du modèle de valeur linéaire lui-même (R²≈0.10, MAE≈7.5 pts) --
+une fois la base gloutonne déjà très forte grâce aux deux heuristiques,
+la recherche arborescente a besoin d'un signal d'évaluation plus fin que
+ce que le modèle actuel peut fournir pour départager les branches et
+convertir sa profondeur en avantage réel. Améliorer encore le rollout
+gagnant ne suffit plus ; la prochaine piste sérieuse est le modèle de
+valeur lui-même (features, non-linéarité, volume de données), pas une
+nouvelle heuristique de décision.
+
+**En pratique, B (`greedy_action` avec les deux heuristiques actives) est
+aujourd'hui le bot le plus fort du dépôt**, plus simple et bien plus
+rapide que MCTS.
