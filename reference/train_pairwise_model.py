@@ -14,22 +14,27 @@ from sklearn.model_selection import GroupShuffleSplit
 HERE = Path(__file__).resolve().parent
 
 
-def fit_and_save(data_path=None, out_path=None, unit="pts"):
+def fit_and_save(data_path=None, out_path=None, unit="pts", target_key="yd"):
     """Ajuste le modèle linéaire contrastif sur `data_path` (schéma
-    Xd/yd/game_idx/feature_names) et sauvegarde le résultat dans
+    Xd/<target_key>/game_idx/feature_names) et sauvegarde le résultat dans
     `out_path`. Factorisé hors de `main()` pour être réutilisable par
     d'autres générateurs de dataset au même schéma (voir
-    train_bootstrap_model.py).
+    train_bootstrap_model.py, train_policy_model.py).
 
     `unit` : uniquement pour l'affichage MAE (ex. "pts" pour un dataset
     pairwise classique, dont `yd` est un delta de score réel ; le dataset
     bootstrap a un `yd` en rang normalisé [0, 1], pas des points -- voir
-    gen_bootstrap_dataset.py)."""
+    gen_bootstrap_dataset.py).
+
+    `target_key` : nom de la colonne cible dans le `.npz` -- "yd" (défaut,
+    diff de valeur) ou "yp" (diff de politique, `log(visites)`, voir
+    train_policy_model.py). `Xd` (les features) est toujours partagé entre
+    les deux cibles -- même paires, juste une régression différente."""
     data_path = Path(data_path) if data_path else HERE / "pairwise_dataset.npz"
     out_path = Path(out_path) if out_path else HERE / "pairwise_model.joblib"
 
     data = np.load(data_path, allow_pickle=True)
-    Xd, yd = data["Xd"], data["yd"]
+    Xd, yd = data["Xd"], data[target_key]
     feature_names = list(data["feature_names"])
 
     # Split AU NIVEAU DES PARTIES (game_idx), pas des paires : plusieurs

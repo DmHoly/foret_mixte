@@ -23,7 +23,8 @@ Ce fichier sert d'index pour ne pas s'y perdre.
 | `pairwise_model_stale_backup.joblib`, `pairwise_dataset_stale_backup.npz` | Snapshot du 15/08 19h48, avant le réentraînement "sous les règles actuelles" de cette même journée (commit `233b14e`) -- prédate même l'ajout des features Clairière (`clearing_size`/`clearing_min_cost`) au vecteur de features. Conservé comme point de repère le plus ancien. |
 | `pairwise_model_true_original_aligned.joblib`, `pairwise_model_retrain1_no_clearing_aligned.joblib` | Paire de modèles produits lors de l'expérience "ajouter les features Clairière au modèle de valeur" (commit `013edbc`, 15/08 19h57) : le premier reprend l'entraînement d'origine réaligné sur le nouveau schéma de features (colonnes Clairière à zéro) pour servir de témoin, le second est réentraîné avec les features Clairière réellement peuplées. Résultat **nul** (l'ajout de ces features n'a pas amélioré le jeu de façon mesurable) -- gardés comme trace de la tentative, pas comme candidats à adopter. |
 | `bootstrap_dataset_pilot1_50it.npz`, `bootstrap_model_pilot1_50it.joblib` | Pilote 1 du bootstrap MCTS façon AlphaZero (17/08, voir "Résultat du pilote 1" plus bas) : auto-jeu MCTS 50 it. + cible = stats de l'arbre, au lieu d'auto-jeu greedy + rollout séparé. Résultat **négatif** au gating (perd contre le modèle officiel ET contre B) -- gardés comme trace, `pairwise_model.joblib` reste inchangé. |
-| `bootstrap_dataset.npz`, `bootstrap_model.joblib` | Pilote 2 du bootstrap MCTS (17/08, voir "Résultat du pilote 2" plus bas) : même méthode que le pilote 1 mais budget MCTS triplé (150 it.) et `min_visits` relevé (5). Progrès net (R² doublé, quasi-parité contre B) mais **pas encore promu** (ne bat pas encore O) -- gardés comme trace/point de départ pour une éventuelle suite, `pairwise_model.joblib` reste inchangé. |
+| `bootstrap_dataset_pilot2_150it.npz`, `bootstrap_model_pilot2_150it.joblib` | Pilote 2 du bootstrap MCTS (17/08, voir "Résultat du pilote 2" plus bas) : même méthode que le pilote 1 mais budget MCTS triplé (150 it.) et `min_visits` relevé (5). Progrès net (R² doublé, quasi-parité contre B) mais **pas encore promu** (ne bat pas encore O) -- gardés comme trace/point de départ pour une éventuelle suite, `pairwise_model.joblib` reste inchangé. |
+| `bootstrap_dataset.npz`, `bootstrap_model.joblib` | Pilote 3, ajoute une cible de politique (PUCT) et retire l'heuristique `greedy_action` de l'évaluation -- voir "Pilote 3" plus bas pour le statut courant. |
 
 ## Comment regénérer le modèle vivant
 
@@ -466,11 +467,11 @@ ci-dessous : est-ce que le signal négatif du pilote 1 venait du bruit sur
 `child.value/child.visits` à faible nombre de visites par candidat ?
 
 **Génération** : 30 parties, 62450 paires en 479s
-(`reference/bootstrap_dataset.npz`) -- 3x plus de paires que le pilote 1
+(`reference/bootstrap_dataset_pilot2_150it.npz`) -- 3x plus de paires que le pilote 1
 malgré un seuil `min_visits` plus strict : à 150 it., beaucoup plus de
 candidats au nœud racine atteignent le seuil, comme prévu.
 
-**Entraînement** (`reference/bootstrap_model.joblib`) : R² = 0,071 (contre
+**Entraînement** (`reference/bootstrap_model_pilot2_150it.joblib`) : R² = 0,071 (contre
 0,037 au pilote 1, **doublé**), MAE = 0,12, **à hauteur de la baseline**
 "aucune différence" (0,12 vs 0,12 -- au pilote 1 le modèle était pire que
 cette baseline). Toujours net en dessous du modèle officiel (R²=0,17),

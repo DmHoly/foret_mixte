@@ -111,6 +111,50 @@ def make_pairwise_leaf_eval(model_path=None):
     return leaf_eval
 
 
+def load_policy_model(path=None):
+    """Modèle de politique linéaire (voir train_policy_model.py) : même
+    forme que le modèle de valeur contrastif (`w . feat(état après le
+    coup)`), mais entraîné sur log(visites) plutôt que sur value/visits --
+    la cible AlphaZero-like (distribution de visites de la racine), voir
+    gen_bootstrap_dataset.py."""
+    path = path or (HERE / "policy_model.joblib")
+    key = str(path)
+    if key not in _MODEL_CACHE:
+        bundle = joblib.load(path)
+        _MODEL_CACHE[key] = (np.asarray(bundle["weights"], dtype=np.float32),
+                              list(bundle["feature_names"]))
+    return _MODEL_CACHE[key]
+
+
+def make_policy_prior(model_path=None):
+    """Prior PUCT pour `search.MCTS(policy_prior=...)` : score BRUT (pas
+    encore une probabilité) pour UNE action candidate depuis UN état donné,
+    signature `policy_prior(state, action) -> float` attendue par
+    `MCTS.choose`/`Node.uct_select` (le softmax de normalisation se fait là,
+    sur les seules actions légales de l'itération courante -- voir
+    search.py).
+
+    ("draw",)/("skip_effect",) reçoivent un score neutre (0.0) : elles ne
+    correspondent pas à une pose (rien à comparer via `feat(état après le
+    coup)`, qui ne bouge pas la composition de forêt pour une simple
+    pioche), et ne sont de toute façon pas dans la cible d'entraînement
+    (voir `_root_candidates` dans gen_bootstrap_dataset.py, même exclusion
+    que pour le modèle de valeur).
+    """
+    weights, _names = load_policy_model(model_path)
+
+    def policy_prior(state, action):
+        if action[0] in ("draw", "skip_effect"):
+            return 0.0
+        player = state.current
+        branch = state.clone()
+        branch.apply(action)
+        feats = F.extract_features(branch, player) + [branch.scores()[player]]
+        return float(np.dot(weights, np.asarray(feats, dtype=np.float32)))
+
+    return policy_prior
+
+
 def make_pairwise_hybrid_leaf_eval(model_path=None, short_rollout_depth=10, seed=None,
                                     tree_combo_bonus=None):
     """Quelques coups réels (rollout court, comme `make_hybrid_leaf_eval`)

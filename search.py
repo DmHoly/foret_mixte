@@ -202,7 +202,7 @@ def beam_policy(game, rng, width=4, depth=2):
 
 class Node:
     __slots__ = ("parent", "action", "player", "children", "visits", "value",
-                 "value_sq", "untried")
+                 "value_sq", "prior")
 
     def __init__(self, parent, action, player):
         self.parent = parent
@@ -212,10 +212,11 @@ class Node:
         self.visits = 0
         self.value = 0.0
         self.value_sq = 0.0  # somme des carrés des retours, pour l'écart-type
-        self.untried = None
+        self.prior = None    # cache {action: score brut du policy_prior}, voir MCTS.choose
 
-    def uct_select(self, legal, c=C_PUCT, risk_k=0.0):
-        """UCT restreint aux actions légales dans la déterminisation courante.
+    def uct_select(self, legal, c=C_PUCT, risk_k=0.0, prior=None):
+        """UCT (ou PUCT si `prior` est fourni) restreint aux actions légales
+        dans la déterminisation courante.
 
         Les compteurs de disponibilité (availability counts) de l'ISMCTS
         classique sont approximés par le total des visites des enfants légaux,
@@ -229,31 +230,73 @@ class Node:
         réguliers à des gains en espérance équivalente mais plus dispersés.
         L'écart-type est calculé sur les retours rétropropagés à ce nœud
         (E[X²] - E[X]², estimateur biaisé mais suffisant ici).
+
+        `prior` (optionnel, session du 17/08) : dict {action: score BRUT non
+        normalisé} rempli par `MCTS.choose()` (un score de politique apprise,
+        voir `value_policy.make_policy_prior`), mis en cache PAR NŒUD --
+        calculé une seule fois par action rencontrée ici, pas à chaque
+        visite (le calcul nécessite de simuler l'action pour en extraire les
+        features, coût non négligeable). Le softmax de normalisation, lui,
+        se refait à CHAQUE appel sur les seules actions légales de
+        l'itération courante (ISMCTS redétermine l'état à chaque itération,
+        l'ensemble des actions légales peut varier d'une fois à l'autre).
+
+        Sans `prior` (défaut, comportement inchangé) : UCT nu, la première
+        action jamais essayée est retournée immédiatement (`child is None`).
+        Avec `prior` : formule PUCT standard
+        (`exploit + c * P(a) * sqrt(total) / (1 + visites)`), qui gère
+        nativement l'ordre d'expansion des actions jamais essayées via le
+        terme d'exploration (pas de cas particulier) -- le prior décide dans
+        quel ordre les tenter plutôt que l'ordre arbitraire de `legal`.
         """
         total = 1
         for a in legal:
             child = self.children.get(a)
             if child is not None:
                 total += child.visits
-        log_total = math.log(total)
 
+        if prior is None:
+            log_total = math.log(total)
+            best, best_score = None, -1e18
+            for a in legal:
+                child = self.children.get(a)
+                if child is None or child.visits == 0:
+                    return a, None
+                mean = child.value / child.visits
+                if risk_k:
+                    mean_sq = child.value_sq / child.visits
+                    std = math.sqrt(max(0.0, mean_sq - mean * mean))
+                    exploit = mean - risk_k * std
+                else:
+                    exploit = mean
+                explore = c * math.sqrt(log_total / child.visits)
+                s = exploit + explore
+                if s > best_score:
+                    best, best_score = a, s
+            return best, self.children[best]
+
+        # -- PUCT : softmax du prior brut mis en cache, restreint à `legal`.
+        raw = [prior[a] for a in legal]
+        m = max(raw)
+        exps = [math.exp(r - m) for r in raw]
+        z = sum(exps)
+        probs = {a: e / z for a, e in zip(legal, exps)}
+
+        sqrt_total = math.sqrt(total)
         best, best_score = None, -1e18
         for a in legal:
             child = self.children.get(a)
-            if child is None or child.visits == 0:
-                return a, None
-            mean = child.value / child.visits
-            if risk_k:
-                mean_sq = child.value_sq / child.visits
+            visits = child.visits if child is not None else 0
+            mean = (child.value / visits) if visits > 0 else 0.0
+            if risk_k and visits > 0:
+                mean_sq = child.value_sq / visits
                 std = math.sqrt(max(0.0, mean_sq - mean * mean))
-                exploit = mean - risk_k * std
-            else:
-                exploit = mean
-            explore = c * math.sqrt(log_total / child.visits)
-            s = exploit + explore
+                mean -= risk_k * std
+            explore = c * probs[a] * sqrt_total / (1 + visits)
+            s = mean + explore
             if s > best_score:
                 best, best_score = a, s
-        return best, self.children[best]
+        return best, self.children.get(best)
 
 
 def determinize(game, observer, rng):
@@ -346,10 +389,22 @@ class MCTS:
     joueur), appelée sur l'état atteint après sélection/expansion, sans
     dérouler la partie plus loin. Par défaut (`leaf_eval=None`), le
     comportement est inchangé (rollout aléatoire biaisé).
+
+    `policy_prior` (optionnel, session du 17/08) : remplace la sélection
+    UCT nue par du PUCT, guidé par une politique apprise plutôt qu'un
+    parcours arbitraire des actions légales. Signature
+    `policy_prior(state, action) -> float` (score brut, pas encore une
+    probabilité -- voir `value_policy.make_policy_prior`), appelée UNE FOIS
+    par action nouvellement rencontrée à un nœud (mise en cache par
+    `Node.prior`, voir `Node.uct_select`), pas à chaque visite. Par défaut
+    (`policy_prior=None`), comportement inchangé (UCT nu, toutes les
+    actions légales restent explorables -- rien n'est filtré, voir
+    `Node.uct_select`).
     """
 
     def __init__(self, observer, iterations=200, seed=None, c=C_PUCT,
-                 rollout_depth=30, leaf_eval=None, risk_k=0.0):
+                 rollout_depth=30, leaf_eval=None, risk_k=0.0,
+                 policy_prior=None):
         self.observer = observer
         self.iterations = iterations
         self.rollout_depth = rollout_depth
@@ -358,6 +413,7 @@ class MCTS:
         self.root = Node(None, None, None)
         self.leaf_eval = leaf_eval
         self.risk_k = risk_k
+        self.policy_prior = policy_prior
 
     def advance(self, action):
         """Réutilise le sous-arbre correspondant au coup effectivement joué."""
@@ -375,7 +431,18 @@ class MCTS:
             # -- sélection
             while not state.over:
                 legal = state.legal_actions()
-                action, child = node.uct_select(legal, self.c, self.risk_k)
+                if self.policy_prior is not None:
+                    cache = node.prior
+                    if cache is None:
+                        cache = {}
+                        node.prior = cache
+                    for a in legal:
+                        if a not in cache:
+                            cache[a] = self.policy_prior(state, a)
+                    prior = cache
+                else:
+                    prior = None
+                action, child = node.uct_select(legal, self.c, self.risk_k, prior)
                 if child is None:
                     # -- expansion
                     mover = state.current
