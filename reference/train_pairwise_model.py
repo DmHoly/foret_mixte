@@ -14,8 +14,21 @@ from sklearn.model_selection import GroupShuffleSplit
 HERE = Path(__file__).resolve().parent
 
 
-def main():
-    data = np.load(HERE / "pairwise_dataset.npz", allow_pickle=True)
+def fit_and_save(data_path=None, out_path=None, unit="pts"):
+    """Ajuste le modèle linéaire contrastif sur `data_path` (schéma
+    Xd/yd/game_idx/feature_names) et sauvegarde le résultat dans
+    `out_path`. Factorisé hors de `main()` pour être réutilisable par
+    d'autres générateurs de dataset au même schéma (voir
+    train_bootstrap_model.py).
+
+    `unit` : uniquement pour l'affichage MAE (ex. "pts" pour un dataset
+    pairwise classique, dont `yd` est un delta de score réel ; le dataset
+    bootstrap a un `yd` en rang normalisé [0, 1], pas des points -- voir
+    gen_bootstrap_dataset.py)."""
+    data_path = Path(data_path) if data_path else HERE / "pairwise_dataset.npz"
+    out_path = Path(out_path) if out_path else HERE / "pairwise_model.joblib"
+
+    data = np.load(data_path, allow_pickle=True)
     Xd, yd = data["Xd"], data["yd"]
     feature_names = list(data["feature_names"])
 
@@ -48,11 +61,14 @@ def main():
 
     print(f"alpha choisi : {model.alpha_:.3g}")
     print(f"Test R^2  : {r2:.4f}")
-    print(f"Test MAE  : {mae:.2f} pts (baseline 'aucune différence' : {baseline_mae:.2f} pts)")
+    print(f"Test MAE  : {mae:.2f} {unit} (baseline 'aucune différence' : {baseline_mae:.2f} {unit})")
 
-    out = HERE / "pairwise_model.joblib"
-    joblib.dump({"weights": model.coef_, "feature_names": feature_names}, out)
-    print(f"Modèle sauvegardé dans {out}")
+    joblib.dump({"weights": model.coef_, "feature_names": feature_names}, out_path)
+    print(f"Modèle sauvegardé dans {out_path}")
+
+
+def main():
+    fit_and_save()
 
 
 if __name__ == "__main__":
