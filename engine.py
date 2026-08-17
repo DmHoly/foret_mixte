@@ -189,10 +189,8 @@ DRAW_PER_COUNT = {
 
 REPLAY_ALWAYS = frozenset({D_EURASIAN_JAY})  # Geai des chênes, inconditionnel
 REPLAY_IF_BONUS = frozenset({D_WOLF, D_BROWN_BEAR})  # bonus jumelles payé
-# Sapin Douglas (dweller "SI bonus : rejoue un tour") pas encore ajouté ici :
-# son dweller_id précis n'a pas été identifié dans le catalogue de Mehdi
-# (nom générique "Sapin Douglas", à confirmer contre cards.py avant d'ajouter
-# une entrée -- laissé en MANQUE pour ne pas deviner un id au hasard).
+# Sapin Douglas : "SI bonus : rejoue un tour" est câblé via TREE_REPLAY_IF_BONUS
+# ci-dessous (c'est un Arbre, pas un dweller), pas dans cette table-ci.
 
 TREE_DRAW_FIXED = {
     T_BIRCH: 1,  # Bouleau : effet de pose, pioche 1 carte en plus du score
