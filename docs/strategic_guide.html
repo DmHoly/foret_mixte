@@ -521,6 +521,12 @@ voir plus bas.</p>
   Chevreuil seul déjà la carte la plus lourde du jeu (11.7%, voir le guide des combos). En
   comptant leur effet indirect via Chevreuil/Fourmi/Mousse, les arbres pèsent encore plus que
   les deux catégories "arbres" ci-dessus (108.4 pts/forêt à elles seules, 23.3%).</p>
+  <p class="section-note">Prudence méthodologique : cette répartition découpe le score EXACTEMENT
+  comme la formule l'attribue carte par carte — pas une mesure contrefactuelle (retrait
+  leave-one-out). Elle sous-estime les cartes ayant des effets de bord sur d'autres (voir Lynx/
+  Sanglier plus bas) et peut sur-estimer celles qui comptent leurs propres pairs (Chevreuil).
+  Bonne pour classer les MÉCANISMES entre eux ; moins fiable carte par carte — voir la section
+  Lynx/Sanglier pour la version corrigée sur ce sous-ensemble.</p>
 </section>
 
 <section aria-labelledby="fouine">
@@ -583,53 +589,62 @@ voir plus bas.</p>
   <h2 id="lynx-sanglier">Lynx vs Sanglier : où est la vraie différence</h2>
   <p class="section-note">Les deux cartes partagent la même structure : +10 pts fixes si un
   déclencheur faible (Chevreuil pour le Lynx, Marcassin pour le Sanglier) est présent, quelle
-  que soit sa quantité. Pts/coût sur 300 parties, 600 forêts, comparé aux combos multiplicatifs
-  cervidés et à la Fouine.</p>
+  que soit sa quantité. <strong>Version corrigée</strong> : le découpage par formule (comme
+  ci-dessus pour les gros leviers) attribue les points EXACTEMENT comme la règle les distribue,
+  mais sous-estime les cartes qui ont des effets de bord sur D'AUTRES cartes (Lynx est aussi
+  PawedAnimal, Sanglier est aussi ClovenhoofedAnimal) et sur-estime celles qui comptent leurs
+  propres pairs. Valeurs ci-dessous par <strong>retrait contrefactuel</strong> (rejoue la
+  partie, retire chaque carte une par une de la forêt finale, mesure la vraie perte de score —
+  <code>reference/card_strength_E.py</code>, 200 parties E vs E, n≥100 par carte).</p>
   <div class="table-scroll">
     <table class="ledger">
-      <caption>Efficacité pts / coût de pose</caption>
+      <caption>Efficacité pts / coût de pose (retrait contrefactuel)</caption>
       <thead><tr><th scope="col">Carte</th><th scope="col" class="num">Coût</th>
-        <th scope="col" class="num">pts/copie</th>
-        <th scope="col" class="num">pts/coût</th></tr></thead>
+        <th scope="col" class="num">pts/copie (naïf)</th>
+        <th scope="col" class="num">pts/copie (vrai)</th>
+        <th scope="col" class="num">pts/coût (vrai)</th></tr></thead>
       <tbody><tr class="rank-top">
       <td><span class="combo-name">Fouine</span><span class="combo-formula">multiplicatif, arbres pleins</span></td>
-      <td class="num">1</td><td class="num">29.18</td><td class="num expected">29.18</td>
+      <td class="num">1</td><td class="num">29.18</td><td class="num">36.42</td><td class="num expected">36.42</td>
     </tr><tr>
       <td><span class="combo-name">Chevreuil</span><span class="combo-formula">multiplicatif, symboles arbre</span></td>
-      <td class="num">2</td><td class="num">35.21</td><td class="num">17.61</td>
+      <td class="num">2</td><td class="num">35.21</td><td class="num">38.94</td><td class="num">19.47</td>
     </tr><tr>
       <td><span class="combo-name">Cerf</span><span class="combo-formula">multiplicatif, Arbre+Plante</span></td>
-      <td class="num">2</td><td class="num">25.47</td><td class="num">12.73</td>
+      <td class="num">2</td><td class="num">25.47</td><td class="num">36.49</td><td class="num">18.25</td>
+    </tr><tr class="rank-top">
+      <td><span class="combo-name">Lynx</span><span class="combo-formula">seuil, +10 si Chevreuil présent — aussi PawedAnimal</span></td>
+      <td class="num">1</td><td class="num">9.58</td><td class="num expected">16.31</td><td class="num expected">16.31</td>
     </tr><tr>
       <td><span class="combo-name">Daim</span><span class="combo-formula">multiplicatif, Cloven-hoofed</span></td>
-      <td class="num">2</td><td class="num">19.57</td><td class="num">9.78</td>
+      <td class="num">2</td><td class="num">19.57</td><td class="num">30.72</td><td class="num">15.36</td>
     </tr><tr>
-      <td><span class="combo-name">Lynx</span><span class="combo-formula">seuil, +10 si Chevreuil présent</span></td>
-      <td class="num">1</td><td class="num">9.58</td><td class="num">9.58</td>
+      <td><span class="combo-name">Sanglier</span><span class="combo-formula">seuil, +10 si Marcassin présent — aussi ClovenhoofedAnimal</span></td>
+      <td class="num">2</td><td class="num">8.94</td><td class="num">19.35</td><td class="num">9.68</td>
     </tr><tr>
       <td><span class="combo-name">Loup</span><span class="combo-formula">multiplicatif, ×Cervidés</span></td>
-      <td class="num">3</td><td class="num">22.35</td><td class="num">7.45</td>
-    </tr><tr>
-      <td><span class="combo-name">Sanglier</span><span class="combo-formula">seuil, +10 si Marcassin présent</span></td>
-      <td class="num">2</td><td class="num">8.94</td><td class="num">4.47</td>
+      <td class="num">3</td><td class="num">22.35</td><td class="num">28.19</td><td class="num">9.40</td>
     </tr></tbody>
     </table>
   </div>
   <p><strong>Réponse directe à la question</strong> : pour N cartes investies (coût inclus), les
-  meilleurs combos multiplicatifs (Fouine, Chevreuil, Cerf) battent nettement le Lynx — et le
-  Lynx bat nettement le Sanglier. Le Lynx n'est PAS une carte faible : à 9.58 pts/coût, il est
-  dans la même tranche que le Daim (9.78), un combo multiplicatif tout à fait correct. Ce n'est
-  pas un souci de comptage de notre côté : le Sanglier coûte objectivement 2 (le double du Lynx)
-  pour le même bonus binaire de +10 — sa faiblesse relative est un fait de la carte, pas un
-  artefact de mesure.</p>
-  <p>Nuance importante sur le "coût du déclencheur" : le Chevreuil qui débloque le Lynx n'est
-  pas un investissement perdu — il rapporte déjà 35.21 pts/copie tout seul (le combo le plus
-  fort du jeu). Le Marcassin qui débloque le Sanglier coûte 0 et ne rapporte qu'1 pt tout seul —
-  presque gratuit à jouer, mais son propre rendement est nul. Dans les deux cas le déclencheur
-  est bon marché ; c'est le coût du bonus LUI-MÊME (1 pour le Lynx contre 2 pour le Sanglier)
-  qui fait toute la différence. Mesuré aussi : quand au moins un Lynx est en forêt, le
-  déclencheur (Chevreuil) est déjà présent dans 94.3% des cas (85.9% pour Sanglier/Marcassin) —
-  le risque de payer un Lynx "à vide" est faible en pratique.</p>
+  meilleurs combos multiplicatifs (Fouine, Chevreuil, Cerf) battent toujours nettement le Lynx.
+  Mais la correction change le classement : <strong>Lynx (16.31 pts/coût) dépasse maintenant le
+  Daim (15.36)</strong> — inversé par rapport au découpage naïf. Le Lynx n'est pas juste "correct",
+  c'est un combo solide : sa vraie valeur inclut le fait qu'un Lynx est aussi un PawedAnimal
+  (nourrit Lucane) et une pose de plus vers un arbre à 4/4 (nourrit la Fouine), des effets de
+  bord que la formule seule ne voit pas. <strong>Le Sanglier reste le plus faible du lot en
+  pts/coût (9.68)</strong>, mais rejoint presque le Loup (9.40) — moins nettement "faible" que ne
+  le suggérait la première mesure. Sa faiblesse relative vient toujours du coût (2, le double du
+  Lynx pour un bonus binaire équivalent), mais l'écart réel est plus resserré.</p>
+  <p>Nuance sur le "coût du déclencheur" : le Chevreuil qui débloque le Lynx n'est pas un
+  investissement perdu — il rapporte déjà ~39 pts/copie tout seul (le combo le plus fort du
+  jeu). Le Marcassin qui débloque le Sanglier coûte 0 et ne rapporte presque rien tout seul —
+  presque gratuit à jouer. Dans les deux cas le déclencheur est bon marché ; c'est le coût du
+  bonus LUI-MÊME (1 pour le Lynx contre 2 pour le Sanglier) qui explique l'essentiel de l'écart.
+  Mesuré aussi : quand au moins un Lynx est en forêt, le déclencheur (Chevreuil) est déjà
+  présent dans 94.3% des cas (85.9% pour Sanglier/Marcassin) — le risque de payer un Lynx "à
+  vide" est faible en pratique.</p>
 </section>
 
 <section aria-labelledby="retenir">
@@ -657,9 +672,11 @@ voir plus bas.</p>
     <li>
       <span class="num">04</span>
       <div><h3>Toutes les cartes "à seuil" ne se valent pas</h3>
-      <p>Lynx (9.58 pts/coût) est un combo correct, comparable au Daim ; Sanglier (4.47) est
-      objectivement faible — la différence vient du coût de la carte elle-même (2 contre 1), pas
-      d'un défaut de calcul.</p></div>
+      <p>Lynx (16.31 pts/coût, retrait contrefactuel) dépasse même le Daim ; Sanglier (9.68)
+      reste le plus faible du lot mais de peu — la différence vient surtout du coût de la carte
+      elle-même (2 contre 1), pas d'un défaut de calcul. Toujours prudence sur les moyennes
+      brutes : la vraie valeur d'une carte inclut ses effets de bord sur les autres, mesurée par
+      retrait contrefactuel, pas seulement sa part dans la formule.</p></div>
     </li>
   </ol>
 </section>

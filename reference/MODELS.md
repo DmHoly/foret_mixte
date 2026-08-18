@@ -1029,3 +1029,66 @@ passage, present sur les 5 guides depuis l'origine : aucun ne déclarait
 `<meta charset="utf-8">`, ce qui casse l'affichage des accents quand le
 fichier est ouvert directement (hors du wrapper de l'outil Artifact qui
 l'injectait implicitement) -- ajouté en première ligne des 5 fichiers.
+
+## Correction : valeurs contrefactuelles vraies vs découpage naïf par formule (18/08 soir)
+
+Question de Mehdi, sur les valeurs Lynx/Sanglier/cervidés ci-dessus :
+"c'est des coûts moyens -- un Chevreuil apporte-t-il des points dans un
+contexte optimisé ? On peut recalculer les valeurs théoriquement."
+Objection méthodologique juste : `gen_score_breakdown.py` attribue les
+points EXACTEMENT comme la formule de scoring les distribue carte par
+carte -- ce n'est **pas** une mesure contrefactuelle. Pour un combo qui
+compte ses propres pairs (ROE_DEER compte les "symboles de l'arbre
+porteur", et un ROE_DEER est lui-même un symbole pour tout ROE_DEER
+voisin sur le même hôte), retirer une seule copie fait baisser le score
+de PLUS que sa part attribuée par la formule -- elle emporte aussi ce
+qu'elle apportait aux autres copies. Inversement, une carte qui
+appartient à un TYPE compté par une autre carte (LYNX est PawedAnimal,
+ce qui alimente STAG_BEETLE ; WILD_BOAR est ClovenhoofedAnimal, ce qui
+alimente FALLOW_DEER ; l'un ou l'autre peut aussi être la carte qui
+complète un arbre à 4/4 pour BEECH_MARTEN) voit sa vraie valeur
+SOUS-estimée par le découpage naïf, qui ignore ces effets de bord.
+
+Corrigé avec la vraie méthode (déjà dans le dépôt, `card_strength.py` --
+retrait contrefactuel leave-one-out sur forêt de FIN de partie réelle,
+voir la docstring du fichier pour la justification complète) adaptée à E
+(`reference/card_strength_E.py`, greedy + tiebreak GBM des deux côtés,
+200 parties). **Bug trouvé et corrigé au passage** dans la méthode
+originale (présent aussi dans `card_strength.py`, jamais déclenché aux
+volumes testés jusqu'ici) : BROWN_BEAR (Ours brun) envoie toute la
+Clairière courante à la Grotte comme effet de pose inconditionnel, un
+mécanisme que le journal de reconstruction ne capturait pas du tout
+(seul `cave_discard`/Raton laveur l'était) -- silencieusement faux dès
+qu'un Ours brun était joué. Corrigé en suivant le delta réel de
+`forest.cave` avant/après chaque action, quelle qu'en soit la cause.
+
+| Carte | Coût | Naïf (découpage formule) | **Contrefactuel vrai (E)** | pts/coût contrefactuel |
+|---|---|---|---|---|
+| BEECH_MARTEN (Fouine) | 1 | 29.18 | **36.42** | **36.42** |
+| ROE_DEER (Chevreuil) | 2 | 35.21 | **38.94** | 19.47 |
+| RED_DEER (Cerf) | 2 | 25.47 | **36.49** | 18.25 |
+| LYNX | 1 | 9.58 | **16.31** | 16.31 |
+| FALLOW_DEER (Daim) | 2 | 19.57 | **30.72** | 15.36 |
+| WILD_BOAR (Sanglier) | 2 | 8.94 | **19.35** | 9.68 |
+| WOLF (Loup) | 3 | 22.35 | **28.19** | 9.40 |
+
+n >= 100 par carte, 200 parties E vs E. **La vraie valeur contrefactuelle
+est systématiquement PLUS ÉLEVÉE que le découpage naïf, pour toutes les
+cartes du tableau** -- confirme que l'effet dominant est la
+sous-estimation des synergies croisées (peer-counting, complétion
+d'arbres, contribution de type à d'autres cartes), pas une quelconque
+sur-estimation.
+
+**Le classement change sur un point notable : LYNX (16.31 pts/coût)
+dépasse maintenant FALLOW_DEER (15.36)** -- inversé par rapport au
+découpage naïf (9.58 contre 9.78). Le Lynx est donc un COMBO SOLIDE,
+pas seulement "correct" : sa vraie valeur inclut le fait qu'un Lynx
+présent est aussi un PawedAnimal (nourrit STAG_BEETLE) et une pose de
+plus vers un arbre à 4/4 (nourrit BEECH_MARTEN). **WILD_BOAR reste le
+plus faible du lot en pts/coût (9.68), mais rejoint quasiment WOLF
+(9.40)** -- moins nettement "objectivement faible" qu'annoncé dans le
+guide stratégique avec le découpage naïf ; sa vraie faiblesse relative
+tient toujours au coût (2, le double du Lynx pour un bonus binaire
+équivalent), mais l'écart réel est plus resserré que la première mesure
+ne le laissait croire. `docs/strategic_guide.html` et le tableau
+Lynx/Sanglier ci-dessus mis à jour avec ces valeurs corrigées.
