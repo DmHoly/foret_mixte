@@ -940,3 +940,92 @@ large que ces deux lignes seules.
 **BEECH_MARTEN (Fouine) mérite un coup d'œil à part** : une seule carte
 pèse 8.5% du score total, presque autant qu'une catégorie entière à elle
 seule -- prochaine piste demandée par Mehdi.
+
+## Combien de Fouines viser -- rendement croissant, pas décroissant (18/08)
+
+Question de Mehdi : la Fouine (`5 x nb_Fouines x nb_arbres_pleins`) n'a
+que 5 exemplaires physiques dans tout le deck -- vaut-il le coup d'en
+accumuler plusieurs, ou rendement décroissant comme la plupart des
+cartes à copies multiples ? Bucketisé par nombre de Fouines détenues en
+fin de partie (300 parties, 600 forêts, E en self-play) :
+
+| Fouines | n forêts | Arbres pleins (moy.) | Pts Fouine (moy.) | Score total (moy.) |
+|---|---|---|---|---|
+| 0 | 137 | 3.49 | 0 | 432.1 |
+| 1 | 212 | 5.00 | 25.0 | 451.4 |
+| 2 | 166 | 5.83 | 58.3 | 485.5 |
+| 3 | 69 | 6.38 | 95.7 | 500.0 |
+| 4 | 16 | 6.88 | 137.5 | 553.4 |
+
+Valeur marginale de chaque copie supplémentaire : +25.0 -> +33.3 ->
++37.3 -> +41.8 pts. **Croissante, pas décroissante.** Pas un artefact de
+la formule (linéaire en `nb_Fouines` à `arbres_pleins` fixé) : le
+nombre d'arbres pleins lui-même grimpe avec le nombre de Fouines (3.49
+-> 6.88) -- poser une Fouine sur un arbre déjà à 3/4 le complète
+instantanément, exactement le genre de coup qu'un bot qui maximise le
+gain immédiat repère et privilégie. Une vraie synergie structurelle,
+pas juste l'arithmétique de la formule. Réserve honnête : corrélation
+sur parties réelles, pas une expérience contrôlée -- une partie qui va
+bien (plus de tours, plus d'habitants posés) produit mécaniquement plus
+de Fouines ET plus d'arbres pleins en même temps, donc une partie de la
+hausse peut venir de "meilleure partie en général" plutôt que d'un
+effet causal pur de la Fouine. **Conclusion pratique : viser les 5
+exemplaires du deck, aucun signe de plafond avant cette limite
+physique.**
+
+## Lynx vs Sanglier : pourquoi l'un vaut et pas l'autre (18/08)
+
+Question de Mehdi : Lynx et Sanglier partagent la même structure (+10
+pts fixes si un déclencheur faible -- Chevreuil pour le Lynx, Marcassin
+=`SQUEAKER` pour le Sanglier -- est présent, peu importe sa quantité).
+Un seul déclencheur faible suffit à activer un levier qui rapporte "pas
+mal" par carte ensuite -- est-ce que ça tient la comparaison face aux
+combos multiplicatifs cervidés pour N cartes investies (coût de pose
+inclus), ou est-ce un souci de comptage ?
+
+Mesuré (`reference/gen_score_breakdown.py` étendu, 300 parties, 600
+forêts) : pts par copie ET pts par point de coût, pour les cartes à
+seuil et les combos multiplicatifs cervidés/Fouine :
+
+| Carte | Coût | pts/copie | pts/coût |
+|---|---|---|---|
+| BEECH_MARTEN (Fouine) | 1 | 29.18 | **29.18** |
+| ROE_DEER (Chevreuil) | 2 | 35.21 | 17.61 |
+| RED_DEER (Cerf) | 2 | 25.47 | 12.73 |
+| FALLOW_DEER (Daim) | 2 | 19.57 | 9.78 |
+| LYNX | 1 | 9.58 | 9.58 |
+| WOLF (Loup) | 3 | 22.35 | 7.45 |
+| WILD_BOAR (Sanglier) | 2 | 8.94 | 4.47 |
+
+**Réponse directe** : pour N cartes investies, les meilleurs combos
+multiplicatifs (Fouine, Chevreuil, Cerf) battent nettement le Lynx --
+mais le Lynx n'est PAS une carte faible pour autant : à 9.58 pts/coût,
+il est dans la même tranche que le Daim (9.78), un combo multiplicatif
+tout à fait correct. **Le Sanglier, en revanche, est bien objectivement
+faible (4.47 pts/coût) -- pas un souci de comptage de notre côté** :
+il coûte 2 (le double du Lynx) pour le même bonus binaire de +10 ; sa
+faiblesse relative est un fait de la carte, pas un artefact de mesure.
+
+Nuance sur le "coût du déclencheur", pour ne pas sous-estimer Lynx/
+Sanglier : le Chevreuil qui débloque le Lynx n'est pas un investissement
+perdu -- il rapporte déjà 35.21 pts/copie tout seul (le combo le plus
+fort du jeu), donc le "coût marginal" réel pour débloquer Lynx est quasi
+nul si on comptait de toute façon jouer un Chevreuil. Le Marcassin qui
+débloque le Sanglier coûte 0 et ne rapporte qu'1 pt tout seul -- lui
+aussi bon marché à obtenir. Dans les deux cas le déclencheur n'est pas
+le problème ; c'est le coût du bonus LUI-MÊME (1 pour Lynx contre 2 pour
+Sanglier) qui explique tout l'écart. Mesuré en complément : quand au
+moins un Lynx est en forêt, le Chevreuil déclencheur est déjà présent
+dans 94.3% des cas (85.9% pour Sanglier/Marcassin) -- le risque de payer
+un Lynx "à vide" est faible en pratique.
+
+## Guide stratégique publié (18/08)
+
+Synthèse de toute cette session (E, pose d'arbre, gros leviers, Fouine,
+Lynx/Sanglier) publiée comme cinquième guide de `docs/`
+(`docs/strategic_guide.html`, avec graphique en barres des leviers de
+score) -- nav mise à jour sur les 4 autres guides. Bug corrigé au
+passage, present sur les 5 guides depuis l'origine : aucun ne déclarait
+`<meta charset="utf-8">`, ce qui casse l'affichage des accents quand le
+fichier est ouvert directement (hors du wrapper de l'outil Artifact qui
+l'injectait implicitement) -- ajouté en première ligne des 5 fichiers.
