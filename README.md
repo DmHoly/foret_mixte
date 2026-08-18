@@ -167,8 +167,11 @@ plutôt que bridé artificiellement — à garder en tête en comparant `bench.p
 `search.py` contient trois politiques.
 
 **greedy** — maximise le gain de score immédiat (delta exact calculé par le
-moteur), avec une prime décroissante à la pose d'arbres (sans elle, une
-politique gloutonne ne plante jamais d'arbre et plafonne très bas).
+moteur), avec une prime de pose d'arbres pilotée par le déficit réel de
+slots libres (main jouable non couverte par les emplacements déjà
+disponibles ; sans cette prime, une politique gloutonne ne plante jamais
+d'arbre et plafonne très bas — voir `reference/MODELS.md`, "Prime de pose
+d'arbre pilotée par le déficit de slots libres").
 
 **beam** — recherche en faisceau sur la main, adversaires et pioche ignorés.
 **Perd contre greedy** en tête-à-tête (182 contre 212 en solo) : regarder

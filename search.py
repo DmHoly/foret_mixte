@@ -86,14 +86,38 @@ def _fallback_action(game):
 
 
 def greedy_action(game, rng, epsilon=0.0, candidates=None, tree_bonus=6,
-                   tree_combo_bonus=None, clearing_urgency=CLEARING_URGENCY_BONUS,
+                   need_scale=3.0, tree_combo_bonus=None,
+                   clearing_urgency=CLEARING_URGENCY_BONUS,
                    tiebreak=None, tiebreak_margin=3.0):
     """Coup maximisant le gain immédiat, avec un correctif d'ouverture.
 
     Un arbre ne rapporte presque rien à la pose mais ouvre 4 emplacements.
     Sans correctif, une politique purement gloutonne ne plante jamais d'arbre
-    et plafonne très bas. `tree_bonus` est une prime décroissante avec le
-    nombre d'arbres déjà en forêt ; c'est une heuristique, pas une règle.
+    et plafonne très bas. `tree_bonus` reste le plafond de cette prime, mais
+    elle n'est plus une simple décroissance en 1/(1+n_trees) : elle suit
+    désormais le déficit réel de slots libres (idée de Mehdi, 18/08) --
+    `slots_libres = 4*n_trees - slots_occupés`, `besoin = habitants en main`
+    (seul proxy légal du "combien je vais poser dans les prochains tours",
+    la main adverse et la pioche future sont cachées), `déficit =
+    max(0, besoin - slots_libres)`. Prime = `tree_bonus * min(1,
+    déficit/need_scale)`, SANS plancher : si les slots libres couvrent déjà
+    la main, planter un arbre ne rapporte plus rien de plus que son
+    `delta_tree` réel (~0). `need_scale` est le déficit (en habitants) qui
+    donne la prime pleine.
+
+    Gaté contre B (`reference/slot_aware_tree_bonus_experiment.py`,
+    ancienne prime 1/(1+n_trees)) : positif et net, +6.2 pts d'écart moyen
+    sur 2000 parties (SE 2.2, ~2.8 écarts-types). Regaté contre E (même
+    politique + `tiebreak` GBM des deux côtés, le bot le plus fort du dépôt
+    à ce jour) : toujours positif mais plus modeste et à la limite de la
+    significativité, +10.6 pts sur 400 parties (SE 5.4, ~2 écarts-types) --
+    voir `reference/MODELS.md` pour le détail et les réserves. `need_scale`
+    entre 2 et 8 change peu le résultat (la formule sature vite : le
+    déficit observé est presque toujours soit nul soit déjà largement au-
+    dessus de ce seuil). Adopté comme nouveau défaut malgré le signal
+    modeste contre E : jamais négatif sur aucune configuration testée, et
+    la logique (ne pas payer une prime de pose quand les slots suffisent
+    déjà) est plus proche des règles du jeu qu'une décroissance générique.
 
     `tree_combo_bonus` (optionnel, {tree_id: bonus}) : prime supplémentaire
     fixe à la plantation d'une espèce donnée, pour corriger un biais
@@ -152,13 +176,17 @@ def greedy_action(game, rng, epsilon=0.0, candidates=None, tree_bonus=6,
     player = game.players[game.current]
     forest = player.forest
     base = forest.score()
-    n_trees = forest.n_trees
+
+    free_slots = 4 * forest.n_trees - sum(forest.occupied_positions)
+    hand_dwellers = sum(1 for c in player.hand if c[0] == DWELLER)
+    deficit = max(0, hand_dwellers - free_slots)
+    slot_bonus = tree_bonus * min(1.0, deficit / need_scale)
 
     best, best_gain = None, -1e9
     gains = {}
     for a in plays:
         if a[0] == "tree":
-            gain = forest.delta_tree(a[1]) + tree_bonus / (1 + n_trees)
+            gain = forest.delta_tree(a[1]) + slot_bonus
             if tree_combo_bonus:
                 gain += tree_combo_bonus.get(a[1], 0.0)
         elif a[0] == "cave_discard":

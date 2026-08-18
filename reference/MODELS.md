@@ -711,3 +711,59 @@ le préférer à E en l'état. Code gardé (`search.MCTS(..., tiebreak=...)`)
 pour quiconque voudrait creuser plus loin (n plus grand contre E,
 `tiebreak_margin` différent, etc.), mais pas de suite priorisée par
 défaut.
+
+## Prime de pose d'arbre pilotée par le déficit de slots libres, adoptée (18/08 soir)
+
+Question de Mehdi : la prime de pose d'arbre (`tree_bonus / (1 + n_trees)`,
+une décroissance générique) a-t-elle un sens plus proche des règles du
+jeu ? Un arbre vide consomme une pose sans rapporter de point -- la
+prime ne devrait s'activer que si les slots libres actuels ne suffisent
+pas au besoin de placement à venir, pas simplement décroître avec le
+nombre d'arbres déjà plantés. Mesure préalable (30 parties MCTS, config
+recommandée) : **taux de remplissage moyen 41,2%, 25,9% des arbres
+totalement vides (0/4)** -- une part significative des poses d'arbres
+n'est jamais rentabilisée, cohérent avec l'intuition.
+
+Prototype (`reference/slot_aware_tree_bonus_experiment.py`) : `slots_libres
+= 4*n_trees - slots_occupés`, `besoin = nombre d'habitants en main` (seul
+proxy légal du besoin à venir -- main adverse et pioche future cachées),
+`déficit = max(0, besoin - slots_libres)`, prime = `tree_bonus *
+min(1, déficit/need_scale)`. Pas de plancher : si les slots libres
+couvrent déjà la main, planter un arbre ne rapporte plus que son
+`delta_tree` réel (~0).
+
+Gaté deux fois, seul le terme de pose d'arbre change (reste identique
+sinon) :
+
+| Adversaire | n | Résultat | Écart moyen (SE) | Lecture |
+|---|---|---|---|---|
+| B (greedy sans tiebreak, référence avant le 18/08) | 2000 | 1059/2000 (53,0%) | +6,2 (2,2) | positif, net, ~2,8 écarts-types |
+| E (greedy + tiebreak GBM des deux côtés, bot actuel le plus fort) | 400 | 210/400 (52,5%) | +10,6 (5,4) | positif, ~2 écarts-types -- à la limite de la significativité |
+
+`need_scale` testé de 1 à 8 : peu sensible dans la plage 2-8 (la formule
+sature -- le déficit observé est presque toujours soit nul soit déjà bien
+au-dessus du seuil), plus faible à 1. Retenu : `need_scale=3.0` (le
+réglage le mieux échantillonné, 400 parties contre E).
+
+**Jamais négatif sur aucune configuration testée, mais le signal contre E
+est plus faible qu'espéré** -- probablement parce que le tiebreak GBM
+d'E corrige déjà une partie des mauvaises poses d'arbres via son propre
+signal appris sur des parties réelles, réduisant la valeur ajoutée d'une
+heuristique de pose plus juste en amont. **Adopté comme nouveau défaut de
+`search.greedy_action`** malgré ce signal modeste : la direction est
+constante sur toutes les configs testées, et le principe (ne pas payer de
+prime quand les slots suffisent déjà) est une déduction directe des
+règles plutôt qu'une décroissance arbitraire -- dans l'esprit de
+`reference/MODELS.md` ci-dessus, un résultat positif mais faible reste un
+résultat, pas une raison de ne pas l'adopter quand il ne coûte rien
+(même complexité, même coût d'exécution) et ne régresse jamais. Un
+échantillon plus large contre E (1000-2000 parties) resterait utile pour
+resserrer l'intervalle avant de considérer la question tranchée.
+
+Prochaine piste évoquée par Mehdi, non commencée : E reste blindé
+d'heuristiques (Clairière, urgence, tiebreak, prime de pose) ; un bot
+qui n'utiliserait QUE la déduction pure des règles du jeu (sans aucune
+prime ajustée à la main) et battrait quand même E serait un résultat
+nettement plus intéressant qu'une nouvelle heuristique de plus -- mais
+demande une approche différente (recherche plus profonde ? modèle appris
+end-to-end ?), pas encore explorée.
