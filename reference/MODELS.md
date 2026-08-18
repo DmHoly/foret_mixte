@@ -767,3 +767,50 @@ prime ajustée à la main) et battrait quand même E serait un résultat
 nettement plus intéressant qu'une nouvelle heuristique de plus -- mais
 demande une approche différente (recherche plus profonde ? modèle appris
 end-to-end ?), pas encore explorée.
+
+### Le taux de remplissage final ne bouge presque pas -- pourquoi
+
+Question de Mehdi, suite logique : les deux heuristiques (prime de pose
+d'arbre, remplissage des slots) jouent-elles vraiment l'une contre
+l'autre ? Mesuré en self-play greedy pur (pas MCTS, mêmes graines des
+deux côtés, ancienne vs nouvelle formule, 2000 parties x2 = 4000 forêts
+par formule) :
+
+| | Ancienne formule | Nouvelle formule |
+|---|---|---|
+| Arbres/forêt | 22.26 | 22.14 |
+| Taux de remplissage | 37.1% (SE 0.17) | 37.5% (SE 0.17) |
+| Arbres vides (0/4) | 46.7% | 46.6% |
+| Arbres pleins (4/4) | 24.8% | 25.4% |
+
+**Quasiment aucun effet sur le résultat final** -- ~0.4 pt de
+remplissage, à peine 1.5-2 écarts-types, alors que le gain de score
+mesuré plus haut est net. Diagnostic plus fin : noter l'état (slots
+libres, habitants en main) juste AVANT chaque pose d'arbre réelle,
+groupé par rang de pose du joueur (1er-3e arbre, 4e-8e, 9e+) :
+
+| Rang de pose | Ancienne (poses "justifiées", déficit>0) | Nouvelle |
+|---|---|---|
+| 1-3 (ouverture) | 48.8% (n=6000) | **53.8%** |
+| 4-8 (milieu) | 1.3% (n=10000) | 2.1% |
+| 9+ (fin) | 0.0% (n=28000+) | 0.0% |
+
+**Le mécanisme existe bien, mais concentré presque exclusivement à
+l'ouverture** (+5 pts de poses "justifiées" sur les 3 premiers arbres).
+Il s'écroule après le 4e arbre parce que le déficit moyen devient déjà
+massivement négatif (-10 puis -39 en fin de partie, jusqu'à 28 slots
+libres en moyenne avant une pose) -- un excédent structurel créé par le
+repli forcé de fin de main : quand `best_gain <= 0` et la main déborde
+(> 7 cartes), `greedy_action` doit jouer le meilleur candidat même s'il
+est nul, souvent un arbre inutile faute d'alternative. Cet excédent,
+une fois créé, pollue le calcul de déficit pour TOUTES les poses
+suivantes de la partie, quelle que soit la formule -- donc les deux
+formules convergent après coup, peu importe laquelle a décidé plus
+finement au début.
+
+**Conclusion** : le gain de score vient très probablement du meilleur
+timing des 2-3 premiers arbres, pas d'une réduction globale du gâchis.
+Le vrai facteur structurel du taux de remplissage observé (37-41%
+suivant la politique) est ce repli forcé de fin de main, pas la formule
+de prime -- piste suivante suggérée par Mehdi pour continuer dans cette
+direction plutôt que re-régler encore la prime de pose.
