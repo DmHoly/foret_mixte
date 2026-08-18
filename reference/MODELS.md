@@ -451,3 +451,89 @@ le bot le plus fort du dépôt.** `pairwise_dataset_bootstrap_gen1.npz` et
 tentative (philosophie du dépôt, voir en tête de ce fichier) ;
 `gen_pairwise_dataset_bootstrap.py` et `gate_bootstrap_gen1.py` restent
 réutilisables si une génération 2 est tentée un jour.
+
+## Diagnostic : R²/MAE global mesure la mauvaise chose (18/08)
+
+Question de Mehdi face au paradoxe ci-dessus (R²/MAE s'améliore à chaque
+itération -- k=1 : 0.075/7.23, k=5 : 0.254/4.50, bootstrap gen1 :
+0.336/4.40 -- alors que le résultat réel contre B empire dans le même
+temps -- 13-15/30, 9/30, 7/30) : les métriques du modèle sont-elles
+bonnes ? Diagnostic dédié (`reference/diagnose_pairwise_metrics.py`) :
+stratifier la précision de SIGNE par tranche de `|diff réel|`, sur le
+même split test que l'entraînement (jamais vu).
+
+| Modèle | \|diff\|<3 (serré) | \|diff\|∈[3,8) | \|diff\|∈[8,20) | \|diff\|≥20 (large) | Gating vs B |
+|---|---|---|---|---|---|
+| k=1 | **77.8%** (n=2381) | 56.9% | 60.0% | 64.0% | 13-15/30 |
+| k=5 (vivant) | 69.4% (n=2800) | 63.7% | 74.9% | 79.3% | 9/30 |
+| Bootstrap gen1 | 68.5% (n=362) | 61.6% | 82.2% | **92.6%** | 7/30 |
+
+Constat : le classement s'INVERSE selon la tranche. Sur les paires
+serrées (majoritaires, et celles où UCT doit trancher entre branches
+voisines), c'est k=1 qui gagne largement -- et c'est aussi lui qui gagne
+le plus au gating. Sur les paires larges, c'est l'inverse total. R²/MAE
+global (dominé par l'erreur au carré, donc par les gros écarts bien que
+peu nombreux) suit la tranche "large", pas la tranche "serrée" -- d'où le
+paradoxe : chaque itération a mieux appris à distinguer les cas déjà
+faciles, au prix de la tranche qui compte réellement pour la décision.
+Vérifié que ce n'est pas de la simple sur-confiance généralisée : la
+norme des poids de k=1 et k=5 est quasi identique (15.7 vs 16.2) alors
+que leur précision sur cas serrés diffère de 8 points -- un vrai
+déplacement du signal appris, pas juste un gain de confiance uniforme
+(le modèle bootstrap, lui, cumule les deux : norme de poids 25.3 et
+décalage vers les gros écarts).
+
+**Précision de signe sur paires serrées ajoutée en métrique permanente**
+dans `train_pairwise_model.py` (affichée à chaque entraînement, à côté de
+R²/MAE) -- elle prédit mieux l'ordre réel du gating que R²/MAE sur ces
+trois points de comparaison (ce n'est encore qu'un échantillon de 3,
+donc un signal fort mais pas une preuve définitive).
+
+## Ré-entraînement pondéré vers les paires serrées : testé, négatif (18/08)
+
+Hypothèse naturelle suite au diagnostic ci-dessus : si R²/MAE surpondère
+les gros écarts, reponderer l'entraînement vers les petits `|diff|`
+devrait corriger le biais et faire remonter la précision sur les paires
+serrées. Implémenté dans `train_pairwise_model.py` (argument optionnel
+`tau` : poids = `1/(|diff|+tau)`). Testé sur `pairwise_dataset.npz` (le
+dataset k=5), trois façons :
+
+| Approche | Précision de signe, \|diff\|<3 |
+|---|---|
+| Non pondéré (référence) | 69.4% |
+| Pondéré, tau ∈ {1.5, 3, 6, 10} | 69.4-69.6% (aucune tendance) |
+| Pondéré EXTRÊME (poids ×50 sur les paires serrées) | 69.2% |
+| Entraîné **exclusivement** sur les paires serrées (bypass total de la pondération) | 69.2% |
+
+**Négatif, sans ambiguïté.** Même en supprimant purement et simplement
+toutes les paires à grand écart de l'entraînement (le cas extrême, où le
+modèle ne voit plus JAMAIS un exemple qui pourrait le distraire vers les
+gros écarts), la précision sur paires serrées ne bouge pas d'un point.
+Ça élimine la fonction de perte comme cause : ce n'est pas que le
+compromis R²/MAE "vole" de la capacité aux paires serrées au profit des
+grosses -- c'est que le modèle linéaire sur ces 78 features **ne peut
+tout simplement pas** aller plus loin sur les paires serrées, quelle que
+soit la façon dont on pondère ou filtre les données d'entraînement.
+Plafond de capacité du modèle (ou de ses features), pas un problème
+d'optimisation. Une explication complémentaire, non testée séparément :
+une partie de ce ~30% d'erreur peut être du bruit irréductible dans
+l'étiquette elle-même (`yd` vient d'une moyenne de `k_rollout=5`
+rollouts, pas d'une vérité exacte) plutôt qu'un vrai déficit
+d'information dans les features.
+
+Pas de nouveau gating lancé pour cette tentative : les métriques offline
+ne bougeant pas de façon significative par rapport au modèle k=5 déjà
+gaté (9/30), relancer un tête-à-tête de 30 parties (~4 min) sur un modèle
+statistiquement indiscernable n'aurait rien appris de plus.
+
+**Bilan à ce stade** : le vrai facteur limitant identifié par cette
+session (18/08) n'est ni la distribution d'entraînement (bootstrap,
+testé négatif) ni la fonction de perte (pondération, testée négative) --
+c'est la capacité du modèle linéaire + features actuelles à discriminer
+des paires de coups presque équivalentes. Prochaine piste sérieuse, si
+cette investigation reprend : soit des features supplémentaires
+spécifiquement informatives sur les cas serrés (pas juste plus de
+volume de données), soit un modèle non linéaire correctement formulé et
+validé au-delà du stade offline (jamais atteint jusqu'ici, voir la
+tentative MLP pairwise plus haut) -- pas une nouvelle variante
+d'entraînement du modèle linéaire actuel.
