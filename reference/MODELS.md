@@ -667,3 +667,47 @@ dépendance à `sklearn`/`joblib`/`reference/` dans `search.py`, qui reste
 volontairement libre de ces dépendances (cohérent avec le design déjà en
 place pour `leaf_eval` de MCTS, fourni par `reference/value_policy.py`
 plutôt que câblé en dur).
+
+## Tiebreak branché dans MCTS : gagne contre l'ancien MCTS, pas contre greedy+tiebreak (18/08)
+
+Suite naturelle : maintenant que le tiebreak batché est bon marché
+(~2-3 ms), peut-il aider MCTS lui-même, pas seulement `greedy_action` ?
+Piège à éviter, vérifié avant d'intégrer : sur un échantillon réel, **82%
+des tours à plusieurs candidats déclenchent un "presque à égalité"** côté
+`greedy_action` -- brancher le modèle DANS le rollout (des dizaines de
+coups simulés par itération, des centaines d'itérations par décision)
+multiplierait le temps par décision par plusieurs dizaines. Intégration
+retenue à la place : `MCTS.choose()` accepte un `tiebreak` optionnel
+(même signature batchée) utilisé **une seule fois**, à la toute fin,
+pour départager les enfants de la racine dont le nombre de visites est
+proche du meilleur trouvé (`tiebreak_margin`, 20% du max par défaut) --
+coût mesuré négligeable (0,1276s vs 0,1285s sur un test à 150 itérations).
+
+Gaté (`reference/gate_mcts_tiebreak.py`, MCTS(150it) + tiebreak final,
+n=30) contre deux adversaires :
+
+| Adversaire | Résultat | Écart moyen (SE) | Lecture |
+|---|---|---|---|
+| D (MCTS actuel, sans tiebreak) | 18/30 | +45,9 (20,8) | positif, ~2,2 écarts-types -- signal réel mais faible |
+| E (greedy + tiebreak, sans MCTS) | 17/30 (1 nul) | +8,5 (22,1) | ~0,4 écart-type -- **statistiquement nul** |
+
+**Conclusion : brancher le tiebreak dans MCTS améliore MCTS par rapport
+à lui-même, mais le résultat obtenu ne dépasse pas ce que `greedy_action`
++ tiebreak fait déjà tout seul, sans arbre de recherche.** Cohérent avec
+le motif déjà documenté plus haut dans ce fichier (tournoi B vs D,
+16/08) : sur ce jeu, un greedy bien réglé résiste étonnamment bien à
+l'ajout d'une recherche arborescente, et ce nouveau résultat confirme que
+ça reste vrai même une fois le greedy ET le MCTS tous deux équipés du
+même comparateur. Le gain de MCTS+tiebreak sur MCTS seul (D) semble
+essentiellement venir du tiebreak lui-même, pas d'une synergie avec la
+recherche.
+
+**Pas de nouveau meilleur bot ici.** E (greedy + heuristiques + tiebreak,
+sans MCTS) reste la référence pratique : aussi fort que F (MCTS +
+tiebreak) sur cette mesure, mais très largement moins cher (pas de
+recherche arborescente à faire tourner). F reste une alternative valide
+(pas rejetée -- le signal contre D est réel), mais rien ne justifie de
+le préférer à E en l'état. Code gardé (`search.MCTS(..., tiebreak=...)`)
+pour quiconque voudrait creuser plus loin (n plus grand contre E,
+`tiebreak_margin` différent, etc.), mais pas de suite priorisée par
+défaut.
