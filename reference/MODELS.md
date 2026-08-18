@@ -814,3 +814,49 @@ Le vrai facteur structurel du taux de remplissage observé (37-41%
 suivant la politique) est ce repli forcé de fin de main, pas la formule
 de prime -- piste suivante suggérée par Mehdi pour continuer dans cette
 direction plutôt que re-régler encore la prime de pose.
+
+### Correction : le repli forcé n'est pas le moteur -- la vraie cause (18/08, suite)
+
+Le repli forcé (`best_gain <= 0 et main > 7 cartes`) évoqué juste
+au-dessus comme explication de l'excédent de slots est un **faux-piste**,
+vérifié directement : il ne se déclenche que dans **0.2% des décisions**
+(116 sur 61745, mesuré sur 300 parties). Il ne peut pas expliquer un
+excédent de 22 arbres/forêt en moyenne.
+
+Diagnostic plus direct : journaliser, pour chaque pose d'arbre RÉELLEMENT
+choisie (chemin normal, pas le repli), la valeur de `slot_bonus` et de
+`delta_tree` séparément (300 parties, 13069 poses observées) :
+
+- **92.9% des poses d'arbre ont `slot_bonus == 0`** (déficit nul -- la
+  prime ne contribue rien à cette décision précise)
+- Et l'arbre gagne quand même, parce que **`delta_tree` seul vaut en
+  moyenne +7.16 points, positif dans 99.6% des cas**
+- Seulement **7.1%** des poses d'arbre s'appuient réellement sur la
+  prime pour l'emporter
+
+**La prémisse de tout ce module ("un arbre ne rapporte presque rien à la
+pose", docstring de `greedy_action` depuis l'origine) est fausse dans
+l'immense majorité des décisions réelles.** Elle n'est vraie qu'à
+l'ouverture, avant que des habitants déjà en jeu n'aient un score qui
+dépend du nombre d'arbres/de la diversité d'espèces (majorités,
+comptages type "x arbres", etc.) -- une fois quelques-uns de ces
+habitants posés, chaque nouvel arbre revalorise rétroactivement ce qui
+est déjà en forêt, et `delta_tree` devient substantiellement positif
+tout seul, sans avoir besoin d'aucune prime artificielle.
+
+**Ça explique proprement les deux résultats précédents** :
+- Pourquoi ancienne/nouvelle formule de prime changent si peu le
+  remplissage final : 93% des poses n'utilisent la prime pour rien,
+  `delta_tree` décide seul.
+- Pourquoi l'effet mesuré de la nouvelle formule se concentre sur les 3
+  premiers arbres : c'est exactement les ~7% de poses où `delta_tree`
+  ne suffit pas encore.
+
+**Corrigé** : la docstring de `search.greedy_action` sera reformulée
+pour ne plus affirmer que le delta est "quasi nul" en général -- ce
+n'est vrai qu'en ouverture. `search.py` reste inchangé pour l'instant
+(la prime actuelle ne fait toujours pas de mal, elle est juste sans
+effet 93% du temps) ; piste suivante proposée par Mehdi : borner la
+prime à l'ouverture (peu d'arbres/peu d'habitants scorants en jeu)
+plutôt que de la calculer à chaque pose pour un effet nul le reste de la
+partie -- voir la section suivante.

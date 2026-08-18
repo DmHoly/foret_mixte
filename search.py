@@ -91,19 +91,32 @@ def greedy_action(game, rng, epsilon=0.0, candidates=None, tree_bonus=6,
                    tiebreak=None, tiebreak_margin=3.0):
     """Coup maximisant le gain immédiat, avec un correctif d'ouverture.
 
-    Un arbre ne rapporte presque rien à la pose mais ouvre 4 emplacements.
-    Sans correctif, une politique purement gloutonne ne plante jamais d'arbre
-    et plafonne très bas. `tree_bonus` reste le plafond de cette prime, mais
-    elle n'est plus une simple décroissance en 1/(1+n_trees) : elle suit
-    désormais le déficit réel de slots libres (idée de Mehdi, 18/08) --
-    `slots_libres = 4*n_trees - slots_occupés`, `besoin = habitants en main`
-    (seul proxy légal du "combien je vais poser dans les prochains tours",
-    la main adverse et la pioche future sont cachées), `déficit =
-    max(0, besoin - slots_libres)`. Prime = `tree_bonus * min(1,
-    déficit/need_scale)`, SANS plancher : si les slots libres couvrent déjà
-    la main, planter un arbre ne rapporte plus rien de plus que son
-    `delta_tree` réel (~0). `need_scale` est le déficit (en habitants) qui
-    donne la prime pleine.
+    En DÉBUT de partie, un arbre rapporte presque rien à la pose (aucun
+    habitant déjà en jeu dont le score dépend du nombre d'arbres/de la
+    diversité d'espèces) mais ouvre 4 emplacements -- sans correctif, une
+    politique purement gloutonne ne plante jamais le premier arbre et
+    plafonne très bas. ATTENTION, ce n'est PAS vrai en général : mesuré
+    (18/08, voir `reference/MODELS.md`, "Correction : le repli forcé
+    n'est pas le moteur") sur des poses d'arbre réelles, `delta_tree`
+    seul vaut en moyenne +7.16 points et est positif dans 99.6% des cas
+    dès qu'un habitant déjà en forêt revalorise chaque arbre planté
+    (majorités, comptages "x arbres", etc.) -- dans 92.9% des poses
+    observées la prime ci-dessous contribue `0` à la décision, sans
+    conséquence, `delta_tree` suffit déjà. Le correctif ne pèse donc
+    réellement que sur l'ouverture, PAS sur toute la partie comme le
+    laisserait penser un simple `tree_bonus / (1 + n_trees)`.
+
+    `tree_bonus` reste le plafond de cette prime, mais elle n'est plus une
+    simple décroissance en 1/(1+n_trees) : elle suit le déficit réel de
+    slots libres (idée de Mehdi, 18/08) -- `slots_libres = 4*n_trees -
+    slots_occupés`, `besoin = habitants en main` (seul proxy légal du
+    "combien je vais poser dans les prochains tours", la main adverse et
+    la pioche future sont cachées), `déficit = max(0, besoin -
+    slots_libres)`. Prime = `tree_bonus * min(1, déficit/need_scale)`,
+    SANS plancher : si les slots libres couvrent déjà la main, planter un
+    arbre ne rapporte plus rien de plus que son `delta_tree` réel (souvent
+    déjà positif tout seul, voir ci-dessus). `need_scale` est le déficit
+    (en habitants) qui donne la prime pleine.
 
     Gaté contre B (`reference/slot_aware_tree_bonus_experiment.py`,
     ancienne prime 1/(1+n_trees)) : positif et net, +6.2 pts d'écart moyen
