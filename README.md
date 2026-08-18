@@ -20,6 +20,7 @@ validé contre cette référence sur 1700 forêts aléatoires (`tests/test_rules
 - [Fonctions de valeur pour MCTS](#fonctions-de-valeur-pour-mcts)
 - [Force intrinsèque des cartes](#force-intrinsèque-des-cartes)
 - [Guides de jeu (combos et tactique)](#guides-de-jeu-combos-et-tactique)
+- [Jouer contre le bot](#jouer-contre-le-bot)
 - [Limitations connues](#limitations-connues)
 
 ## Installation
@@ -69,8 +70,13 @@ python bench.py mcts_pairwise_hybrid 300 8 10       # MCTS (config recommandée)
 | `run_narrated_hybrid.py` | Rejoue une partie MCTS coup par coup (main, alternatives explorées, score). |
 | `run_stats_hybrid.py` | Statistiques agrégées (fréquence de jeu par carte) sur N parties MCTS. |
 | `reference/value_policy.py` | Fonctions d'évaluation de feuille (`leaf_eval`) pour MCTS. |
-| `reference/gen_pairwise_dataset.py`, `train_pairwise_model.py` | Génère et entraîne le modèle de valeur contrastif linéaire (`pairwise_model.joblib`, celui utilisé par défaut). |
+| `reference/gen_pairwise_dataset.py`, `train_pairwise_model.py` | Génère et entraîne le modèle de valeur contrastif linéaire (`pairwise_model.joblib`, celui utilisé par défaut). L'entraînement rapporte R²/MAE global **et** la précision de signe par tranche de `\|diff réel\|` (égalités exactes exclues -- voir `reference/MODELS.md`) ; accepte aussi une repondération optionnelle vers les paires serrées (`tau`), testée et négative. |
+| `reference/diagnose_pairwise_metrics.py` | Diagnostic autonome : précision de signe par tranche d'écart réel, sur k=1/k=5/bootstrap gen1, voir `reference/MODELS.md`. |
+| `reference/diagnose_nonlinear_capacity.py` | Teste si un modèle non linéaire (Gradient Boosting) discrimine mieux les paires serrées que le modèle linéaire, en validation croisée -- positif (~+10 pts), voir `reference/MODELS.md`. |
 | `reference/train_pairwise_mlp.py` | Variante non linéaire (réseau siamois) du modèle contrastif -- testée et non retenue, voir `reference/MODELS.md`. |
+| `reference/train_pairwise_gbm.py`, `gate_pairwise_tiebreak.py` | Modèle de comparaison pairwise Gradient Boosting, branché dans `search.greedy_action(..., tiebreak=...)` pour départager les candidats presque à égalité de gain exact -- **bat B 74-76/100 au gating**, le bot le plus fort du dépôt à ce jour. Les comparaisons d'un même tour sont regroupées en un seul appel au modèle (~×7,6 sur le temps par partie au lieu de ×140 initial), encore trop coûteux pour un rollout MCTS. Voir `reference/MODELS.md`. |
+| `reference/gate_mcts_tiebreak.py` | Même tiebreak branché dans `search.MCTS(..., tiebreak=...)`, une seule fois en fin de décision (pas dans le rollout) -- bat l'ancien MCTS mais pas mieux que greedy+tiebreak seul, donc pas de nouveau meilleur bot. Voir `reference/MODELS.md`. |
+| `reference/gen_pairwise_dataset_bootstrap.py`, `gate_bootstrap_gen1.py` | Piste bootstrap MCTS façon AlphaZero : échantillonne les paires d'entraînement sur des trajectoires **MCTS** (pas greedy), puis gate le modèle réentraîné contre B avant toute promotion -- génération 1 testée et rejetée, voir `reference/MODELS.md`. |
 | `reference/MODELS.md` | Index des fichiers `.joblib`/`.npz` de `reference/` : lequel est chargé par défaut, lesquels sont des sauvegardes historiques et pourquoi. |
 | `reference/card_strength.py`, `card_strength_mcts.py` | Force intrinsèque des cartes par retrait contrefactuel. |
 | `reference/features.py`, `gen_value_dataset.py`, `train_value_model.py` | Modèle de valeur absolu (MLP), voir [limitations](#fonctions-de-valeur-pour-mcts). |
@@ -82,6 +88,8 @@ python bench.py mcts_pairwise_hybrid 300 8 10       # MCTS (config recommandée)
 | `reference/bench_heuristics.py` | Tournoi rond-robin {Greedy, MCTS} x {Clairière forte, Clairière faible} : isole l'apport de la politique de décision de celui de l'heuristique de pioche. |
 | `reference/gen_combo_guide.py` | Génère `docs/combo_guide.html` et `docs/tactical_guide.html`, voir [guides de jeu](#guides-de-jeu-combos-et-tactique). |
 | `reference/gen_technique_guide.py` | Génère `docs/technique_guide.html` (mécanique de jeu coup par coup), voir [guides de jeu](#guides-de-jeu-combos-et-tactique). |
+| `reference/gen_decisive_guide.py` | Génère `docs/decisive_guide.html` (choix évidents vs décisifs de E sur ses meilleures parties), voir [guides de jeu](#guides-de-jeu-combos-et-tactique). |
+| `play_vs_bot.py` | Partie interactive dans le terminal contre B/D/E/F, voir [jouer contre le bot](#jouer-contre-le-bot). |
 | `docs/combo_guide.html`, `docs/tactical_guide.html`, `docs/technique_guide.html` | Guides de jeu pour un humain : combos classés par espérance, enseignements MCTS vs greedy, mécanique de jeu coup par coup. **Générés**, ne pas éditer à la main. |
 | `archive/` | Scripts d'itération et audit remplacés par des versions plus propres, conservés pour l'historique (voir `archive/README.md`). |
 
@@ -313,8 +321,21 @@ joueur humain plutôt que pour lire du code :
   très mince (médiane à 2 cartes, tombe régulièrement à 0), et des arbres
   coûteux (Marronnier, Chêne, Sapin Douglas) qui finissent défaussés plus
   souvent que plantés une fois la diversité d'espèces déjà acquise.
+- **[docs/decisive_guide.html](docs/decisive_guide.html)** — se concentre
+  sur E (greedy + heuristiques + comparateur Gradient Boosting, voir
+  [fonctions de valeur pour MCTS](#fonctions-de-valeur-pour-mcts)) : sur
+  ses meilleures parties (top 10% par score), distingue les choix
+  ÉVIDENTS (delta exact suffit) des choix vraiment DÉCISIFS (le
+  comparateur préfère une carte différente de celle qu'un calcul de gain
+  immédiat aurait jouée). Répond à *qu'est-ce que ce bot voit que le
+  calcul à un coup ne voit pas ?* — avec les corrections les plus
+  fréquentes (souvent : quelle espèce d'arbre planter quand plusieurs
+  rapportent ~0 pt immédiat) et des exemples concrets où le comparateur
+  sacrifie du gain immédiat pour un pari sur la valeur différée (ex.
+  poser un champignon à effet permanent plutôt qu'un arbre qui rapporte
+  plus tout de suite).
 
-Les trois pages s'ouvrent directement dans un navigateur (aucun serveur
+Les quatre pages s'ouvrent directement dans un navigateur (aucun serveur
 requis, aucune dépendance) et se renvoient les unes aux autres par un lien
 en haut de page. GitHub n'affiche pas de rendu pour un fichier `.html`
 (juste le code source), d'où les aperçus ci-dessous : cliquer dessus (ou
@@ -345,6 +366,33 @@ physique par identité Python, pas seulement l'état final) :
 python reference/gen_technique_guide.py               # 30 parties MCTS, 150 it. (~6 min)
 python reference/gen_technique_guide.py 10 100         # échantillon réduit, plus rapide
 ```
+
+Le guide des choix décisifs est généré par `reference/gen_decisive_guide.py`,
+qui fait jouer E contre lui-même et compare, à chaque décision, le coup
+réellement joué à celui qu'un delta exact seul aurait choisi :
+
+```bash
+python reference/gen_decisive_guide.py                 # 500 parties E vs E (~4 min)
+python reference/gen_decisive_guide.py 100 10           # échantillon réduit (100 parties, top 10%)
+python reference/gen_decisive_guide.py --from-cache     # re-génère la page depuis le cache, sans rejouer
+```
+
+## Jouer contre le bot
+
+`play_vs_bot.py` fait jouer une partie interactive dans le terminal contre
+un des bots du dépôt (le paiement et le choix en Clairière restent
+automatiques, comme pour les bots — voir [limitations](#limitations-connues)) :
+
+```bash
+python play_vs_bot.py            # contre E (le plus fort), tu commences
+python play_vs_bot.py B 1        # contre le greedy simple, tu joues en second
+python play_vs_bot.py E 0 12345  # graine fixe, pour rejouer la même partie avec une autre stratégie
+python play_vs_bot.py F          # contre MCTS + tiebreak, le plus lent à jouer
+```
+
+Chaque partie est ajoutée à `human_vs_bot_log.jsonl` (victoires/défaites par
+bot affrontées, affichées en fin de partie) pour suivre ta progression sur
+plusieurs sessions et stratégies.
 
 ## Limitations connues
 

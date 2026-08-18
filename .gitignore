@@ -3,3 +3,4 @@ __pycache__/
 .claude/
 regle_copie*.pdf
 reference/*.log
+reference/decisive_guide_cache.json

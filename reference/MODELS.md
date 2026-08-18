@@ -10,8 +10,9 @@ Ce fichier sert d'index pour ne pas s'y perdre.
 
 | Fichier | Rôle |
 |---|---|
-| `pairwise_model.joblib` | Modèle de valeur contrastif **utilisé par défaut** par `value_policy.make_pairwise_hybrid_leaf_eval()` (donc par tout MCTS instancié sans `model_path` explicite). Réentraîné le 16/08 (2e fois) avec `gen_pairwise_dataset.py` + `train_pairwise_model.py` sous le code actuel : heuristique `choose_draw_source` **forte** + urgence Clairière (`CLEARING_URGENCY_BONUS`) dans `greedy_action`. |
-| `pairwise_dataset.npz` | Dataset de paires (diff features -> diff gain réel) ayant servi à entraîner `pairwise_model.joblib` ci-dessus. 150 parties, 21468 paires, 78 features. |
+| `pairwise_model.joblib` | Modèle de valeur contrastif **linéaire**, utilisé par `value_policy.make_pairwise_hybrid_leaf_eval()` (donc par tout MCTS instancié sans `model_path` explicite) -- seul modèle qui se décompose en fonction de valeur par état, donc le seul utilisable comme `leaf_eval` MCTS pour l'instant. Réentraîné le 16/08 (2e fois) avec `gen_pairwise_dataset.py` + `train_pairwise_model.py` sous le code actuel : heuristique `choose_draw_source` **forte** + urgence Clairière (`CLEARING_URGENCY_BONUS`) dans `greedy_action`. |
+| `pairwise_gbm_model.joblib` | Modèle de comparaison pairwise **Gradient Boosting**, utilisé par `value_policy.make_pairwise_gbm_tiebreak()` -- branché dans `search.greedy_action(..., tiebreak=...)` pour départager les candidats presque à égalité de gain exact (opt-in, PAS actif par défaut). Entraîné le 18/08 par `train_pairwise_gbm.py` sur le même dataset que le modèle linéaire. **Bat B 74/100 au gating** (voir "Comparateur pairwise dans greedy_action" plus bas) -- le bot le plus fort du dépôt à ce jour, mais utilisable uniquement pour des décisions réelles (trop coûteux pour un rollout MCTS en l'état, voir cette même section). |
+| `pairwise_dataset.npz` | Dataset de paires (diff features -> diff gain réel) ayant servi à entraîner `pairwise_model.joblib` ET `pairwise_gbm_model.joblib` ci-dessus. 150 parties, 21468 paires, 78 features. |
 | `value_model.joblib`, `value_dataset.npz` | Modèle de valeur **absolu** (MLP), approche antérieure au modèle contrastif. Toujours chargé par `value_policy.make_leaf_eval()`/`make_hybrid_leaf_eval()`, utilisé par `bench.py` comme point de comparaison. Limite connue : MAE (~12 pts) plus grande que l'écart réel entre deux coups candidats (~9 pts) -- voir la docstring de `gen_pairwise_dataset.py`, c'est justement pour corriger ce défaut que l'approche contrastive a été introduite. |
 
 ## Sauvegardes historiques (non chargées par défaut, gardées pour comparaison/rollback)
@@ -22,6 +23,7 @@ Ce fichier sert d'index pour ne pas s'y perdre.
 | `pairwise_model_pre_clairiere_forte.joblib`, `pairwise_dataset_pre_clairiere_forte.npz` | Le modèle contrastif tel qu'il était **avant** le premier réentraînement du 16/08 -- entraîné sous l'ancienne heuristique de Clairière (toujours la carte la moins chère). C'est ce modèle périmé qui faisait perdre MCTS+forte face à Greedy+forte (12/30) ; le réentraînement (voir `bench_heuristics.py`) fait remonter le taux de victoire à ~59%. Gardé pour pouvoir reproduire la comparaison avant/après. |
 | `pairwise_model_stale_backup.joblib`, `pairwise_dataset_stale_backup.npz` | Snapshot du 15/08 19h48, avant le réentraînement "sous les règles actuelles" de cette même journée (commit `233b14e`) -- prédate même l'ajout des features Clairière (`clearing_size`/`clearing_min_cost`) au vecteur de features. Conservé comme point de repère le plus ancien. |
 | `pairwise_model_true_original_aligned.joblib`, `pairwise_model_retrain1_no_clearing_aligned.joblib` | Paire de modèles produits lors de l'expérience "ajouter les features Clairière au modèle de valeur" (commit `013edbc`, 15/08 19h57) : le premier reprend l'entraînement d'origine réaligné sur le nouveau schéma de features (colonnes Clairière à zéro) pour servir de témoin, le second est réentraîné avec les features Clairière réellement peuplées. Résultat **nul** (l'ajout de ces features n'a pas amélioré le jeu de façon mesurable) -- gardés comme trace de la tentative, pas comme candidats à adopter. |
+| `pairwise_model_bootstrap_gen1.joblib`, `pairwise_dataset_bootstrap_gen1.npz` | Génération 1 de la piste bootstrap MCTS façon AlphaZero (18/08) -- entraîné sur des trajectoires **MCTS**, pas greedy. Meilleur R²/MAE offline jamais mesuré (0.336/4.40) mais **rejeté au gating** contre B (7/30) -- voir la section "Génération 1 du bootstrap" plus bas pour le détail. |
 
 ## Comment regénérer le modèle vivant
 
@@ -285,11 +287,12 @@ incrémentale. **B (Greedy + ciblage carte forte + urgence Clairière)
 reste, avec une conviction plus forte que jamais, le meilleur bot du
 dépôt.**
 
-## Piste future (non implémentée) : bootstrap MCTS façon AlphaZero
+## Piste bootstrap MCTS façon AlphaZero
 
 Documentée ici sur demande de Mehdi (16/08) -- explique la logique, les
-étapes et le pourquoi, mais **rien de ce qui suit n'est codé**. C'est un
-plan, pas un résultat.
+étapes et le pourquoi. **Génération 1 implémentée et testée le 18/08, voir
+le résultat tout en bas de cette section** -- négatif, cohérent avec les 6
+tentatives précédentes.
 
 ### Le problème exact que ça cible
 
@@ -387,3 +390,324 @@ propres résultats, sans nouvelle vérité extérieure).
 Si cette piste est tentée un jour, commencer petit (une seule génération
 de bootstrap, 30 parties, 50 itérations MCTS) pour valider que le
 principe fonctionne avant d'investir dans plusieurs générations.
+
+## Génération 1 du bootstrap : implémentée et testée, résultat négatif (18/08)
+
+Exactement l'échelle recommandée ci-dessus : 30 parties, MCTS(50it.) des
+deux côtés (`reference/gen_pairwise_dataset_bootstrap.py`, sortie
+`pairwise_dataset_bootstrap_gen1.npz`). Correction minimale (option 1 de
+la section précédente) : le mécanisme d'étiquetage des paires (candidats
+à un même nœud, k=5 rollouts à seed commune, repris tel quel de
+`gen_pairwise_dataset.py`) est inchangé -- seule la trajectoire qui fait
+avancer la partie entre deux points d'échantillonnage change : MCTS avec
+le modèle vivant en `leaf_eval` (`VP.make_pairwise_hybrid_leaf_eval`), au
+lieu de l'auto-jeu greedy bruité utilisé par toutes les tentatives
+précédentes. Les deux heuristiques de `greedy_action` (`choose_draw_source`
+forte, `CLEARING_URGENCY_BONUS`) restent actives par défaut partout dans
+ce pipeline (rollouts de labellisation, mini-rollout du leaf_eval hybride
+des bots de self-play) -- **pas touchées**, contrairement à une session
+antérieure qui les avait débranchées pour générer des données et avait vu
+le classement du bot entraîné dessus s'effondrer (voir les fichiers
+`*_pre_clairiere_urgence*`/`*_pre_clairiere_forte*` plus haut). 4640
+paires collectées, ~5-6s/partie.
+
+Réentraîné (`train_pairwise_model.py pairwise_dataset_bootstrap_gen1.npz
+pairwise_model_bootstrap_gen1.joblib`) :
+
+| Modèle | Test R² | Test MAE |
+|---|---|---|
+| Bootstrap gen1 (trajectoires MCTS) | **0.336** | **4.40** (meilleur jamais mesuré, tous essais confondus) |
+| Linéaire k=5 (trajectoires greedy, référence précédente) | 0.254 | 4.50 |
+
+Meilleur score hors ligne jamais obtenu sur ce projet -- cohérent avec
+l'hypothèse de départ (échantillonner la distribution réellement visitée
+par MCTS devrait donner un signal plus pertinent). Gaté contre B avant
+toute promotion (`reference/gate_bootstrap_gen1.py`, MCTS(150it) avec ce
+modèle vs `greedy_action` B, sièges alternés, n=30) :
+
+**D(candidat bootstrap gen1) vs B : 7/30 (23%), écart moyen -72.9 (SE 21.2),
+médiane -25.5.**
+
+**Rejeté -- pas promu comme modèle vivant.** Pire que le modèle linéaire
+k=5 déjà rejeté (9/30) et que le tout premier modèle linéaire k=1 (13-15/30),
+malgré le meilleur R²/MAE jamais mesuré. Confirme le motif de la section
+précédente sur une 7e tentative, avec un angle différent (distribution
+d'entraînement corrigée, pas juste bruit de cible réduit) : le bootstrap
+change QUELS ÉTATS sont vus à l'entraînement, mais le facteur limitant
+identifié plus haut n'est pas la distribution des états -- c'est la
+capacité du modèle **linéaire** lui-même à discriminer des coups voisins
+avec la précision fine qu'exige UCT pour départager des branches proches,
+quelle que soit la distribution sur laquelle il est ajusté. Une seule
+génération ne suffit sans doute pas à trancher si le principe du bootstrap
+lui-même est viable (une génération peut juste être bruitée), mais vu le
+coût d'une génération (~4 min de génération + gating) pour un résultat
+dans la même fourchette que tout ce qui a déjà échoué, ce n'est pas jugé
+prioritaire d'enchaîner une génération 2 sans un changement d'architecture
+(modèle non linéaire correctement formulé, jamais validé faute d'avoir
+dépassé le stade offline -- voir la tentative MLP pairwise ci-dessus).
+
+**Modèle vivant inchangé : B (Greedy + Clairière forte + urgence) reste
+le bot le plus fort du dépôt.** `pairwise_dataset_bootstrap_gen1.npz` et
+`pairwise_model_bootstrap_gen1.joblib` gardés comme trace de cette
+tentative (philosophie du dépôt, voir en tête de ce fichier) ;
+`gen_pairwise_dataset_bootstrap.py` et `gate_bootstrap_gen1.py` restent
+réutilisables si une génération 2 est tentée un jour.
+
+## Diagnostic : R²/MAE global mesure la mauvaise chose (18/08)
+
+Question de Mehdi face au paradoxe ci-dessus (R²/MAE s'améliore à chaque
+itération -- k=1 : 0.075/7.23, k=5 : 0.254/4.50, bootstrap gen1 :
+0.336/4.40 -- alors que le résultat réel contre B empire dans le même
+temps -- 13-15/30, 9/30, 7/30) : les métriques du modèle sont-elles
+bonnes ? Diagnostic dédié (`reference/diagnose_pairwise_metrics.py`) :
+stratifier la précision de SIGNE par tranche de `|diff réel|`, sur le
+même split test que l'entraînement (jamais vu).
+
+| Modèle | \|diff\|<3 (serré) | \|diff\|∈[3,8) | \|diff\|∈[8,20) | \|diff\|≥20 (large) | Gating vs B |
+|---|---|---|---|---|---|
+| k=1 | 59.2% (n=639) | 56.9% | 60.0% | 64.0% | 13-15/30 |
+| k=5 (vivant) | **47.9%** (n=1519) | 63.7% | 74.9% | 79.3% | 9/30 |
+| Bootstrap gen1 | 58.4% (n=245) | 61.6% | 82.2% | **92.6%** | 7/30 |
+
+**CORRECTIF (même jour, après coup) :** le tableau ci-dessus a d'abord
+été publié avec des chiffres erronés sur la tranche serrée (k=1 77.8%,
+k=5 69.4%, bootstrap 68.5%) -- bug dans la métrique, pas dans les
+modèles. ~23% des paires ont un `|diff| réel` EXACTEMENT nul (candidats
+dupliqués, ex. deux exemplaires identiques d'une carte en main -> même
+état, même résultat de rollout). Un modèle linéaire SANS INTERCEPT les
+"réussit" gratuitement par construction (`w.(fi-fi) = 0`, donc
+`sign(0)==sign(0)`) quels que soient ses poids appris -- ça n'a rien à
+voir avec sa capacité à discriminer quoi que ce soit. Une fois ces
+égalités exclues (comme il se doit pour toute comparaison honnête, et
+comme c'est indispensable pour comparer équitablement à un modèle non
+linéaire qui n'a structurellement aucune raison de tomber pile sur 0),
+les chiffres ci-dessus sont les bons. Corrigé dans
+`train_pairwise_model.py` et `reference/diagnose_pairwise_metrics.py`.
+
+Constat corrigé : le lien "précision sur paires serrées prédit le
+gating" ne tient PLUS aussi proprement qu'annoncé initialement -- k=5 est
+maintenant SOUS le hasard (47.9%) sur les paires serrées, pire que
+bootstrap gen1 (58.4%) qui pourtant perd plus largement au gating (7/30
+contre 9/30). La tranche serrée reste informative (k=1, le meilleur au
+gating, est aussi le seul dont aucune tranche n'est sous le hasard), mais
+ce n'est pas le prédicteur parfait annoncé initialement -- prudence sur
+toute conclusion tirée d'un échantillon de 3 modèles.
+
+## Ré-entraînement pondéré vers les paires serrées : testé, négatif (18/08)
+
+Hypothèse naturelle suite au diagnostic ci-dessus : si R²/MAE surpondère
+les gros écarts, reponderer l'entraînement vers les petits `|diff|`
+devrait corriger le biais et faire remonter la précision sur les paires
+serrées. Implémenté dans `train_pairwise_model.py` (argument optionnel
+`tau` : poids = `1/(|diff|+tau)`). Testé sur `pairwise_dataset.npz` (le
+dataset k=5), trois façons :
+
+| Approche | Précision de signe, \|diff\|<3 (égalités exactes exclues) |
+|---|---|
+| Non pondéré (référence) | 47.9% |
+| Pondéré, tau ∈ {1.5, 3, 6, 10} | 47.9-48.1% (aucune tendance) |
+| Pondéré EXTRÊME (poids ×50 sur les paires serrées) | 47.4% |
+| Entraîné **exclusivement** sur les paires serrées (bypass total de la pondération) | 47.3% |
+
+(Chiffres corrigés le même jour après découverte du bug de comptage des
+égalités exactes décrit plus haut -- la conclusion qualitative ne change
+pas, mais elle est encore plus nette : le modèle linéaire tourne
+**au niveau du hasard, voire en dessous**, sur les paires serrées, quelle
+que soit la pondération.)
+
+**Négatif, sans ambiguïté.** Même en supprimant purement et simplement
+toutes les paires à grand écart de l'entraînement (le cas extrême, où le
+modèle ne voit plus JAMAIS un exemple qui pourrait le distraire vers les
+gros écarts), la précision sur paires serrées ne bouge pas d'un point.
+Ça élimine la fonction de perte comme cause : ce n'est pas que le
+compromis R²/MAE "vole" de la capacité aux paires serrées au profit des
+grosses -- c'est que le modèle linéaire sur ces 78 features **ne peut
+tout simplement pas** discriminer les paires serrées, quelle que soit la
+façon dont on pondère ou filtre les données d'entraînement. Plafond de
+capacité du modèle (ou de ses features), pas un problème d'optimisation
+-- voir la section suivante, qui teste directement si un modèle non
+linéaire fait mieux sur ce point précis.
+
+Pas de nouveau gating lancé pour cette tentative : les métriques offline
+ne bougeant pas de façon significative par rapport au modèle k=5 déjà
+gaté (9/30), relancer un tête-à-tête de 30 parties (~4 min) sur un modèle
+statistiquement indiscernable n'aurait rien appris de plus.
+
+**Bilan à ce stade** : le vrai facteur limitant identifié par cette
+session (18/08) n'est ni la distribution d'entraînement (bootstrap,
+testé négatif) ni la fonction de perte (pondération, testée négative) --
+c'est la capacité du **modèle linéaire** à discriminer des paires de
+coups presque équivalentes (sur ces mêmes 78 features). Reste à savoir si
+c'est un plafond de MODÈLE (un non-linéaire ferait mieux sur les mêmes
+features) ou de FEATURES (aucun modèle ne peut faire mieux avec cette
+information). Voir la section suivante.
+
+## Un modèle non linéaire (Gradient Boosting) discrimine mieux les paires serrées (18/08)
+
+Suite logique : la tentative MLP pairwise précédente (voir plus haut) est
+non linéaire mais a échoué -- ça pourrait clore la question "un modèle
+plus expressif aide-t-il ?". Mais cette tentative n'a jamais été évaluée
+avec la métrique corrigée ci-dessus (elle a été rejetée hors ligne, sur
+R²/MAE honnête post-fuite, avant même d'atteindre le stade du gating) --
+donc pas de réponse propre à "un non-linéaire bat-il le linéaire sur les
+paires serrées, spécifiquement ?". Testé directement, en pur diagnostic
+(pas encore branché dans MCTS) : `HistGradientBoostingRegressor` de
+sklearn, entraîné sur la même cible `Xd -> yd` que le modèle linéaire,
+même split. Validation croisée à 4 blocs groupés par partie (pas juste un
+split unique), 6 configurations d'hyperparamètres (profondeur 2-6, taux
+d'apprentissage 0.03-0.05, L2 1-3) :
+
+| Modèle | Précision de signe CV, \|diff\|<3 (égalités exclues) |
+|---|---|
+| Linéaire (Ridge) | 47.7% ± 0.6% (sous le hasard) |
+| Gradient Boosting (HGB), 6 configs testées | 57.3-57.7% ± ~1% (stable sur toute la plage) |
+
+**Positif, et robuste** -- gain de ~10 points, insensible aux
+hyperparamètres testés (donc pas un coup de chance sur un tirage
+particulier). Sur le jeu de test unique (hors CV), le Gradient Boosting
+bat aussi le linéaire sur les tranches [3,8) et reste comparable sur les
+tranches larges (déjà faciles pour tout modèle). Contrairement à
+l'hypothèse envisagée après le rejet du MLP ("c'est un plafond de modèle,
+pas de fonction de perte, donc rien à attendre de plus"), il y a bien de
+la structure non linéaire exploitable dans ces 78 features que le modèle
+linéaire ne capte pas -- juste pas via l'architecture (MLP siamois) ni
+le protocole d'entraînement testés jusqu'ici.
+
+**Piège à éviter avant de brancher ça dans MCTS** : ce diagnostic entraîne
+`HistGradientBoostingRegressor` directement sur `Xd -> yd` (comme le
+modèle linéaire), ce qui donne un prédicteur de DIFFÉRENCE valide pour
+comparer deux candidats au même nœud, mais **ne se décompose pas** en
+fonction de valeur par état (`value(état) = w.feat(état)` marche
+seulement parce que le modèle est linéaire ; `arbre(a) - arbre(b) !=
+arbre(a-b)` pour un ensemble d'arbres). `leaf_eval(state) -> valeurs`
+attend une fonction par état, pas une fonction de paire -- brancher ce
+modèle tel quel demanderait soit un modèle de valeur ABSOLU par état
+(déjà tenté en MLP, négatif), soit une architecture siamoise (déjà
+tentée en MLP, négatif après correction de fuite). Piste la plus
+prometteuse pour éviter ce piège : utiliser le comparateur pairwise
+DIRECTEMENT là où `gen_pairwise_dataset.py` échantillonne déjà ses
+candidats -- au même nœud, dans `greedy_action` et dans le rollout de
+`search.py` -- comme règle de décision ("lequel des candidats est
+meilleur ?") plutôt que comme `leaf_eval` MCTS. Pas encore implémenté ;
+proposé à Mehdi avant d'investir dans cette intégration.
+
+## Comparateur pairwise dans greedy_action : implémenté, positif (18/08)
+
+Suite du diagnostic ci-dessus, comme proposé. `search.greedy_action`
+accepte désormais un paramètre optionnel `tiebreak(candidate_states,
+reference_state, observer) -> list[float]` (opt-in, `None` par défaut --
+comportement inchangé si non fourni). Intégration choisie pour éviter le
+piège de décomposabilité : le delta exact reste le classement PRINCIPAL
+des candidats (inchangé) ; seuls les candidats à moins de
+`tiebreak_margin` (3 pts par défaut, la tranche validée par
+`diagnose_nonlinear_capacity.py`) du meilleur gain exact sont départagés
+par le modèle, TOUS comparés en une seule fois à ce meilleur (comparaison
+"en étoile", voir plus bas pour pourquoi). `reference/value_policy.py`
+fournit `make_pairwise_gbm_tiebreak()`, qui charge
+`pairwise_gbm_model.joblib` (entraîné par `train_pairwise_gbm.py`, voir
+plus haut).
+
+Gaté contre B (`reference/gate_pairwise_tiebreak.py`, greedy_action avec
+tiebreak vs greedy_action sans, sièges alternés, n=100) :
+
+**E (greedy + tiebreak GBM) vs B : 74/100, écart moyen +50.1 (SE 10,6),
+médiane +50,0.**
+
+**Positif, net, et le premier résultat de cette investigation à
+effectivement battre B.** ~4.7 écarts-types au-dessus de zéro -- pas un
+bruit statistique. Confirme que le signal détecté hors ligne (Gradient
+Boosting +10 pts de précision de signe sur les paires serrées, validé en
+CV) se traduit bien en victoires réelles une fois branché correctement
+(en évitant le piège `leaf_eval`/décomposabilité qui avait fait échouer
+le MLP). **E est, à ce jour, le bot le plus fort du dépôt** -- toutes
+les mentions antérieures de "B reste le meilleur bot du dépôt" dans ce
+fichier sont datées (avant le 18/08 après-midi) et doivent être lues
+comme telles.
+
+### Regroupement des appels au modèle (même jour, suite)
+
+Mesure du coût initial (tournoi séquentiel, un appel `model.predict` par
+candidat proche) : partie complète gloutonne SANS tiebreak ~18 ms
+(`bench.py`) ; AVEC tiebreak sur un seul des deux joueurs, ~2,6 s --
+environ ×140. Profilé avant d'incriminer l'algorithme : le clonage de
+partie (`Game.clone()+apply()`, ~15 µs) et le calcul des features
+(~40 µs) sont négligeables -- **le coût vient à ~99% de l'appel
+`model.predict()` lui-même, ~2,4 ms**, un overhead fixe de sklearn par
+appel (validation d'entrée, dispatch), pas de la complexité de
+l'algorithme. Vérifié que cet overhead est quasiment fixe, pas
+proportionnel au nombre de lignes : prédire un batch de 50 lignes en un
+seul appel coûte ~2,3 ms au total (45 µs/ligne) contre ~2,4 ms pour 1
+seule ligne -- un facteur ~50 par ligne en regroupant.
+
+**Corrigé** : `tiebreak` est passé d'un tournoi séquentiel (un appel par
+candidat, mise à jour du "meilleur courant" au fil de l'eau) à une
+comparaison en étoile (tous les candidats proches comparés EN UN SEUL
+APPEL au meilleur trouvé par le delta exact, `make_pairwise_gbm_tiebreak`
+mis à jour en conséquence dans `reference/value_policy.py`). Semantique
+légèrement différente (étoile contre un ancrage fixe, plutôt qu'un
+tournoi qui pourrait changer d'ancrage en cours de route) mais
+mathématiquement plus proche de comment le modèle a été entraîné (paires
+depuis un même nœud), et re-gaté pour vérifier l'absence de régression :
+
+**E (batché) vs B : 76/100 (2 nuls), écart moyen +66,0 (SE 10,3),
+médiane +72,5** -- au moins aussi bon que la version séquentielle (dans
+le bruit), et le gating complet (100 parties) est passé de 106 s à 24 s.
+Partie complète avec tiebreak sur un seul joueur : **0,34 s** (contre
+2,6 s), soit **~×7,6** au lieu de ×140 par rapport au greedy nu -- pas
+encore négligeable, mais un tournoi typique n'a que 2-3 candidats proches
+à la fois (pas 50), donc l'amortissement réel est plus modeste que le
+×50 mesuré sur un batch synthétique. Reste trop cher pour un rollout MCTS
+en l'état (`greedy_action` y est appelé des dizaines de fois par
+simulation, des centaines de simulations par décision), mais nettement
+plus proche d'être viable qu'avant ce correctif.
+
+Pas encore promu comme comportement par défaut de `greedy_action` :
+`tiebreak` reste opt-in (`None` par défaut) pour ne pas forcer une
+dépendance à `sklearn`/`joblib`/`reference/` dans `search.py`, qui reste
+volontairement libre de ces dépendances (cohérent avec le design déjà en
+place pour `leaf_eval` de MCTS, fourni par `reference/value_policy.py`
+plutôt que câblé en dur).
+
+## Tiebreak branché dans MCTS : gagne contre l'ancien MCTS, pas contre greedy+tiebreak (18/08)
+
+Suite naturelle : maintenant que le tiebreak batché est bon marché
+(~2-3 ms), peut-il aider MCTS lui-même, pas seulement `greedy_action` ?
+Piège à éviter, vérifié avant d'intégrer : sur un échantillon réel, **82%
+des tours à plusieurs candidats déclenchent un "presque à égalité"** côté
+`greedy_action` -- brancher le modèle DANS le rollout (des dizaines de
+coups simulés par itération, des centaines d'itérations par décision)
+multiplierait le temps par décision par plusieurs dizaines. Intégration
+retenue à la place : `MCTS.choose()` accepte un `tiebreak` optionnel
+(même signature batchée) utilisé **une seule fois**, à la toute fin,
+pour départager les enfants de la racine dont le nombre de visites est
+proche du meilleur trouvé (`tiebreak_margin`, 20% du max par défaut) --
+coût mesuré négligeable (0,1276s vs 0,1285s sur un test à 150 itérations).
+
+Gaté (`reference/gate_mcts_tiebreak.py`, MCTS(150it) + tiebreak final,
+n=30) contre deux adversaires :
+
+| Adversaire | Résultat | Écart moyen (SE) | Lecture |
+|---|---|---|---|
+| D (MCTS actuel, sans tiebreak) | 18/30 | +45,9 (20,8) | positif, ~2,2 écarts-types -- signal réel mais faible |
+| E (greedy + tiebreak, sans MCTS) | 17/30 (1 nul) | +8,5 (22,1) | ~0,4 écart-type -- **statistiquement nul** |
+
+**Conclusion : brancher le tiebreak dans MCTS améliore MCTS par rapport
+à lui-même, mais le résultat obtenu ne dépasse pas ce que `greedy_action`
++ tiebreak fait déjà tout seul, sans arbre de recherche.** Cohérent avec
+le motif déjà documenté plus haut dans ce fichier (tournoi B vs D,
+16/08) : sur ce jeu, un greedy bien réglé résiste étonnamment bien à
+l'ajout d'une recherche arborescente, et ce nouveau résultat confirme que
+ça reste vrai même une fois le greedy ET le MCTS tous deux équipés du
+même comparateur. Le gain de MCTS+tiebreak sur MCTS seul (D) semble
+essentiellement venir du tiebreak lui-même, pas d'une synergie avec la
+recherche.
+
+**Pas de nouveau meilleur bot ici.** E (greedy + heuristiques + tiebreak,
+sans MCTS) reste la référence pratique : aussi fort que F (MCTS +
+tiebreak) sur cette mesure, mais très largement moins cher (pas de
+recherche arborescente à faire tourner). F reste une alternative valide
+(pas rejetée -- le signal contre D est réel), mais rien ne justifie de
+le préférer à E en l'état. Code gardé (`search.MCTS(..., tiebreak=...)`)
+pour quiconque voudrait creuser plus loin (n plus grand contre E,
+`tiebreak_margin` différent, etc.), mais pas de suite priorisée par
+défaut.
