@@ -246,10 +246,10 @@ def load_pairwise_gbm_model(path=None):
     """Modèle de comparaison pairwise Gradient Boosting (voir
     train_pairwise_gbm.py) : contrairement à `load_pairwise_model`, pas
     décomposable en fonction de valeur par état (`arbre(a) - arbre(b) !=
-    arbre(a-b)`) -- utilisable uniquement en comparaison directe de deux
-    états via `make_pairwise_gbm_tiebreak`, jamais comme `leaf_eval` MCTS.
-    Voir reference/MODELS.md, "Un modèle non linéaire (Gradient Boosting)
-    discrimine mieux les paires serrées"."""
+    arbre(a-b)`) -- utilisable uniquement en comparaison directe (un
+    candidat contre une référence, par batch) via `make_pairwise_gbm_tiebreak`,
+    jamais comme `leaf_eval` MCTS. Voir reference/MODELS.md, "Un modèle
+    non linéaire (Gradient Boosting) discrimine mieux les paires serrées"."""
     path = path or (HERE / "pairwise_gbm_model.joblib")
     key = str(path)
     if key not in _MODEL_CACHE:
@@ -259,21 +259,35 @@ def load_pairwise_gbm_model(path=None):
 
 def make_pairwise_gbm_tiebreak(model_path=None):
     """Comparateur pour `search.greedy_action(..., tiebreak=...)` :
-    départage deux candidats presque à égalité de gain exact via le
-    modèle Gradient Boosting entraîné sur les mêmes paires (diff de
-    features -> diff de gain réel, voir gen_pairwise_dataset.py) que le
-    modèle linéaire -- mais gagne ~10 points de précision de signe sur
-    cette tranche précise (voir reference/MODELS.md). Retourne
-    `tiebreak(state_a, state_b, observer) -> float`, positif si `a` est
-    jugé meilleur que `b`."""
+    départage les candidats presque à égalité de gain exact via le modèle
+    Gradient Boosting entraîné sur les mêmes paires (diff de features ->
+    diff de gain réel, voir gen_pairwise_dataset.py) que le modèle
+    linéaire -- mais gagne ~10 points de précision de signe sur cette
+    tranche précise (voir reference/MODELS.md).
+
+    Retourne `tiebreak(candidate_states, reference_state, observer) ->
+    list[float]`, un score par candidat (positif si meilleur que
+    `reference_state`) -- TOUS les candidats sont comparés à la référence
+    en UN SEUL appel au modèle (`model.predict` sur un batch), pas un
+    appel par candidat. Décision délibérée (18/08) : ~99% du temps mesuré
+    par appel vient d'un overhead fixe de sklearn (validation d'entrée,
+    dispatch), pas de la complexité de l'algorithme -- prédire pour 50
+    lignes d'un coup coûte à peine plus cher que pour 1 seule (2.3ms vs
+    2.4ms mesurés), donc regrouper les comparaisons d'un même tour donne
+    un facteur ~10-50 sans changer le modèle ni son signal."""
     model = load_pairwise_gbm_model(model_path)
 
-    def tiebreak(state_a, state_b, observer):
-        scores_a = state_a.scores()
-        scores_b = state_b.scores()
-        fa = F.extract_features(state_a, observer) + [scores_a[observer]]
-        fb = F.extract_features(state_b, observer) + [scores_b[observer]]
-        diff = np.asarray(fa, dtype=np.float32) - np.asarray(fb, dtype=np.float32)
-        return float(model.predict(diff.reshape(1, -1))[0])
+    def tiebreak(candidate_states, reference_state, observer):
+        ref_scores = reference_state.scores()
+        f_ref = np.asarray(
+            F.extract_features(reference_state, observer) + [ref_scores[observer]],
+            dtype=np.float32)
+        rows = []
+        for state in candidate_states:
+            scores_now = state.scores()
+            f = F.extract_features(state, observer) + [scores_now[observer]]
+            rows.append(np.asarray(f, dtype=np.float32) - f_ref)
+        X = np.stack(rows, axis=0)
+        return [float(v) for v in model.predict(X)]
 
     return tiebreak

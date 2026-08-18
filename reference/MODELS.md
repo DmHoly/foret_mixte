@@ -594,16 +594,15 @@ proposé à Mehdi avant d'investir dans cette intégration.
 ## Comparateur pairwise dans greedy_action : implémenté, positif (18/08)
 
 Suite du diagnostic ci-dessus, comme proposé. `search.greedy_action`
-accepte désormais un paramètre optionnel `tiebreak(state_a, state_b,
-observer) -> float` (opt-in, `None` par défaut -- comportement inchangé
-si non fourni). Intégration choisie pour éviter le piège de
-décomposabilité : le delta exact reste le classement PRINCIPAL des
-candidats (inchangé) ; seuls les candidats à moins de `tiebreak_margin`
-(3 pts par défaut, la tranche validée par
+accepte désormais un paramètre optionnel `tiebreak(candidate_states,
+reference_state, observer) -> list[float]` (opt-in, `None` par défaut --
+comportement inchangé si non fourni). Intégration choisie pour éviter le
+piège de décomposabilité : le delta exact reste le classement PRINCIPAL
+des candidats (inchangé) ; seuls les candidats à moins de
+`tiebreak_margin` (3 pts par défaut, la tranche validée par
 `diagnose_nonlinear_capacity.py`) du meilleur gain exact sont départagés
-par le modèle, par tournoi glissant (candidat courant contre le
-challenger suivant, un `game.clone()+apply()` par candidat proche --
-voir `search.greedy_action` pour le détail). `reference/value_policy.py`
+par le modèle, TOUS comparés en une seule fois à ce meilleur (comparaison
+"en étoile", voir plus bas pour pourquoi). `reference/value_policy.py`
 fournit `make_pairwise_gbm_tiebreak()`, qui charge
 `pairwise_gbm_model.joblib` (entraîné par `train_pairwise_gbm.py`, voir
 plus haut).
@@ -625,18 +624,42 @@ les mentions antérieures de "B reste le meilleur bot du dépôt" dans ce
 fichier sont datées (avant le 18/08 après-midi) et doivent être lues
 comme telles.
 
-**Limite importante, non résolue** : le coût. Une partie complète
-gloutonne SANS tiebreak prend ~18 ms (`bench.py`) ; AVEC tiebreak sur un
-seul des deux joueurs, ~2,6 s -- environ ×140. Viable pour des décisions
-réelles (une par tour, un seul joueur) ou pour du gating comme ci-dessus,
-mais **PAS encore utilisable dans le rollout MCTS en l'état** (`greedy_action`
-y est appelé des dizaines de fois par simulation, des centaines de
-simulations par décision -- le coût exploserait). Brancher le tiebreak
-dans MCTS (rollout et/ou politique de sélection) est la suite naturelle
-si ce résultat se confirme, mais demande d'abord de réduire ce coût
-(candidats proches moins nombreux, modèle plus léger, ou clone moins
-cher que `Game.clone()` complet pour ce cas précis) -- pas fait, proposé
-à Mehdi avant d'investir dedans.
+### Regroupement des appels au modèle (même jour, suite)
+
+Mesure du coût initial (tournoi séquentiel, un appel `model.predict` par
+candidat proche) : partie complète gloutonne SANS tiebreak ~18 ms
+(`bench.py`) ; AVEC tiebreak sur un seul des deux joueurs, ~2,6 s --
+environ ×140. Profilé avant d'incriminer l'algorithme : le clonage de
+partie (`Game.clone()+apply()`, ~15 µs) et le calcul des features
+(~40 µs) sont négligeables -- **le coût vient à ~99% de l'appel
+`model.predict()` lui-même, ~2,4 ms**, un overhead fixe de sklearn par
+appel (validation d'entrée, dispatch), pas de la complexité de
+l'algorithme. Vérifié que cet overhead est quasiment fixe, pas
+proportionnel au nombre de lignes : prédire un batch de 50 lignes en un
+seul appel coûte ~2,3 ms au total (45 µs/ligne) contre ~2,4 ms pour 1
+seule ligne -- un facteur ~50 par ligne en regroupant.
+
+**Corrigé** : `tiebreak` est passé d'un tournoi séquentiel (un appel par
+candidat, mise à jour du "meilleur courant" au fil de l'eau) à une
+comparaison en étoile (tous les candidats proches comparés EN UN SEUL
+APPEL au meilleur trouvé par le delta exact, `make_pairwise_gbm_tiebreak`
+mis à jour en conséquence dans `reference/value_policy.py`). Semantique
+légèrement différente (étoile contre un ancrage fixe, plutôt qu'un
+tournoi qui pourrait changer d'ancrage en cours de route) mais
+mathématiquement plus proche de comment le modèle a été entraîné (paires
+depuis un même nœud), et re-gaté pour vérifier l'absence de régression :
+
+**E (batché) vs B : 76/100 (2 nuls), écart moyen +66,0 (SE 10,3),
+médiane +72,5** -- au moins aussi bon que la version séquentielle (dans
+le bruit), et le gating complet (100 parties) est passé de 106 s à 24 s.
+Partie complète avec tiebreak sur un seul joueur : **0,34 s** (contre
+2,6 s), soit **~×7,6** au lieu de ×140 par rapport au greedy nu -- pas
+encore négligeable, mais un tournoi typique n'a que 2-3 candidats proches
+à la fois (pas 50), donc l'amortissement réel est plus modeste que le
+×50 mesuré sur un batch synthétique. Reste trop cher pour un rollout MCTS
+en l'état (`greedy_action` y est appelé des dizaines de fois par
+simulation, des centaines de simulations par décision), mais nettement
+plus proche d'être viable qu'avant ce correctif.
 
 Pas encore promu comme comportement par défaut de `greedy_action` :
 `tiebreak` reste opt-in (`None` par défaut) pour ne pas forcer une

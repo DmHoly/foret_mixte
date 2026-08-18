@@ -115,19 +115,25 @@ def greedy_action(game, rng, epsilon=0.0, candidates=None, tree_bonus=6,
     toujours préférer poser une carte moyenne de la main plutôt que sécuriser
     une carte forte contestée, qui peut disparaître au tour de l'adversaire.
 
-    `tiebreak` (optionnel, `tiebreak(state_a, state_b, observer) -> float`,
-    positif si `a` est jugé meilleur que `b`) : départage les candidats
-    dont le gain exact est à moins de `tiebreak_margin` points du meilleur
-    trouvé -- PAS en concurrence avec le delta exact (qui reste le
-    classement principal), seulement un second tour pour les cas où ce
-    delta ne suffit déjà pas à distinguer les candidats de façon fiable.
-    Voir `reference/value_policy.make_pairwise_gbm_tiebreak` et
+    `tiebreak` (optionnel, `tiebreak(candidate_states, reference_state,
+    observer) -> list[float]`, un score par candidat, positif si meilleur
+    que la référence) : départage EN UN SEUL APPEL tous les candidats dont
+    le gain exact est à moins de `tiebreak_margin` points du meilleur
+    trouvé, comparés à ce meilleur (comparaison "en étoile", pas un
+    tournoi séquentiel) -- PAS en concurrence avec le delta exact (qui
+    reste le classement principal), seulement un second tour pour les cas
+    où ce delta ne suffit déjà pas à distinguer les candidats de façon
+    fiable. Voir `reference/value_policy.make_pairwise_gbm_tiebreak` et
     `reference/MODELS.md` ("Un modèle non linéaire discrimine mieux les
     paires serrées") : un modèle linéaire tourne au niveau du hasard sur
     cette tranche précise (delta exact < 3 pts) ; un Gradient Boosting
     entraîné sur les mêmes paires y gagne ~10 points de précision de
-    signe. Coûte un clone de partie par candidat proche du meilleur --
-    non actif par défaut (opt-in), les décisions réelles et les rollouts
+    signe. Le regroupement en un seul appel (plutôt qu'un appel par
+    candidat) est délibéré : le coût mesuré vient d'un overhead fixe par
+    appel sklearn, pas de la complexité de l'algorithme -- comparer 50
+    candidats d'un coup ne coûte quasiment pas plus cher qu'en comparer 1
+    (voir reference/MODELS.md), d'où un facteur ~10-50 de gain à regrouper.
+    Non actif par défaut (opt-in), les décisions réelles et les rollouts
     existants ne changent pas de comportement tant que ce paramètre n'est
     pas fourni explicitement.
     """
@@ -175,11 +181,15 @@ def greedy_action(game, rng, epsilon=0.0, candidates=None, tree_bonus=6,
             observer = game.current
             best_state = game.clone()
             best_state.apply(best)
+            near_states = []
             for a in near:
                 state = game.clone()
                 state.apply(a)
-                if tiebreak(state, best_state, observer) > 0:
-                    best, best_state = a, state
+                near_states.append(state)
+            scores = tiebreak(near_states, best_state, observer)
+            top = max(range(len(scores)), key=lambda i: scores[i])
+            if scores[top] > 0:
+                best = near[top]
 
     if (clearing_urgency and ("draw",) in actions
             and clearing_urgency > best_gain
