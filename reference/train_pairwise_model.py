@@ -54,11 +54,20 @@ SIGN_ACC_BINS = [(0, 3), (3, 8), (8, 20), (20, 1e9)]
 
 
 def sign_accuracy_report(pred, y):
+    """Precision de signe, EGALITES EXACTES EXCLUES (y == 0 -- typiquement
+    des candidats dupliques menant a un resultat identique). Un modele
+    lineaire SANS INTERCEPT les "reussit" gratuitement par construction
+    (w.0 = 0) quels que soient ses poids, ce qui gonfle artificiellement
+    son score si on les compte -- diagnostique le 18/08 en comparant a un
+    modele non lineaire, qui n'a structurellement aucune raison de tomber
+    pile sur 0 (voir reference/MODELS.md)."""
     lines = []
-    overall = float(np.mean(np.sign(pred) == np.sign(y)))
-    lines.append(f"Precision de signe (test, tout confondu) : {overall:.1%}")
+    nonzero = y != 0
+    n_ties = int(np.sum(~nonzero))
+    overall = float(np.mean(np.sign(pred[nonzero]) == np.sign(y[nonzero])))
+    lines.append(f"Precision de signe (test, tout confondu, {n_ties} egalites exactes exclues) : {overall:.1%}")
     for lo, hi in SIGN_ACC_BINS:
-        mask = (np.abs(y) >= lo) & (np.abs(y) < hi)
+        mask = nonzero & (np.abs(y) >= lo) & (np.abs(y) < hi)
         n = int(mask.sum())
         if n == 0:
             continue

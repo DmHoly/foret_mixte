@@ -15,6 +15,21 @@ Reproduit exactement le split train/test de train_pairwise_model.py
 (GroupShuffleSplit par game_idx, test_size=0.15, random_state=0) pour
 évaluer chaque modèle sur SES PROPRES paires de test, jamais vues à
 l'entraînement.
+
+CORRECTIF (18/08, après coup) : la précision de signe EXCLUT désormais
+les paires à diff réel EXACTEMENT nul (candidats dupliqués -- ex. deux
+exemplaires identiques d'une carte en main -- qui produisent un état et
+un résultat de rollout identiques). Ces paires représentaient ~23% du
+dataset (7804/35940 sur pairwise_dataset.npz) et un modèle linéaire SANS
+INTERCEPT les "réussit" gratuitement par construction (`w.(fi-fi) = 0`,
+`sign(0)==sign(0)`), quels que soient ses poids appris -- alors qu'un
+modèle non linéaire (arbre, MLP) n'a structurellement aucune raison de
+tomber pile sur 0 pour ce même point. Une première version de ce
+diagnostic ne les excluait pas, ce qui gonflait artificiellement le score
+"paires serrées" de tous les modèles linéaires (k=5 : 69.4% -> 47.9% une
+fois corrigé, sous le hasard) et rendait la comparaison avec un modèle
+non linéaire structurellement biaisée en faveur du linéaire. Voir
+reference/MODELS.md pour l'historique de la correction.
 """
 import sys
 from pathlib import Path
@@ -51,12 +66,16 @@ def evaluate(dataset_name, model_name):
 
     mae = float(np.mean(np.abs(pred - yte)))
     r2 = 1.0 - np.sum((pred - yte) ** 2) / np.sum((yte - yte.mean()) ** 2)
-    sign_acc = float(np.mean(np.sign(pred) == np.sign(yte)))
+    nonzero_all = yte != 0
+    sign_acc = float(np.mean(np.sign(pred[nonzero_all]) == np.sign(yte[nonzero_all])))
 
-    print(f"  n_test={len(yte)}  R^2={r2:.3f}  MAE={mae:.2f}  "
+    n_ties = int(np.sum(yte == 0))
+    print(f"  n_test={len(yte)} (dont {n_ties} egalites exactes exclues du signe)  "
+          f"R^2={r2:.3f}  MAE={mae:.2f}  "
           f"precision de signe (tout confondu)={sign_acc:.1%}")
+    nonzero = yte != 0
     for lo, hi in BINS:
-        mask = (np.abs(yte) >= lo) & (np.abs(yte) < hi)
+        mask = nonzero & (np.abs(yte) >= lo) & (np.abs(yte) < hi)
         n = int(mask.sum())
         if n == 0:
             continue

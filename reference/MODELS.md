@@ -464,30 +464,33 @@ même split test que l'entraînement (jamais vu).
 
 | Modèle | \|diff\|<3 (serré) | \|diff\|∈[3,8) | \|diff\|∈[8,20) | \|diff\|≥20 (large) | Gating vs B |
 |---|---|---|---|---|---|
-| k=1 | **77.8%** (n=2381) | 56.9% | 60.0% | 64.0% | 13-15/30 |
-| k=5 (vivant) | 69.4% (n=2800) | 63.7% | 74.9% | 79.3% | 9/30 |
-| Bootstrap gen1 | 68.5% (n=362) | 61.6% | 82.2% | **92.6%** | 7/30 |
+| k=1 | 59.2% (n=639) | 56.9% | 60.0% | 64.0% | 13-15/30 |
+| k=5 (vivant) | **47.9%** (n=1519) | 63.7% | 74.9% | 79.3% | 9/30 |
+| Bootstrap gen1 | 58.4% (n=245) | 61.6% | 82.2% | **92.6%** | 7/30 |
 
-Constat : le classement s'INVERSE selon la tranche. Sur les paires
-serrées (majoritaires, et celles où UCT doit trancher entre branches
-voisines), c'est k=1 qui gagne largement -- et c'est aussi lui qui gagne
-le plus au gating. Sur les paires larges, c'est l'inverse total. R²/MAE
-global (dominé par l'erreur au carré, donc par les gros écarts bien que
-peu nombreux) suit la tranche "large", pas la tranche "serrée" -- d'où le
-paradoxe : chaque itération a mieux appris à distinguer les cas déjà
-faciles, au prix de la tranche qui compte réellement pour la décision.
-Vérifié que ce n'est pas de la simple sur-confiance généralisée : la
-norme des poids de k=1 et k=5 est quasi identique (15.7 vs 16.2) alors
-que leur précision sur cas serrés diffère de 8 points -- un vrai
-déplacement du signal appris, pas juste un gain de confiance uniforme
-(le modèle bootstrap, lui, cumule les deux : norme de poids 25.3 et
-décalage vers les gros écarts).
+**CORRECTIF (même jour, après coup) :** le tableau ci-dessus a d'abord
+été publié avec des chiffres erronés sur la tranche serrée (k=1 77.8%,
+k=5 69.4%, bootstrap 68.5%) -- bug dans la métrique, pas dans les
+modèles. ~23% des paires ont un `|diff| réel` EXACTEMENT nul (candidats
+dupliqués, ex. deux exemplaires identiques d'une carte en main -> même
+état, même résultat de rollout). Un modèle linéaire SANS INTERCEPT les
+"réussit" gratuitement par construction (`w.(fi-fi) = 0`, donc
+`sign(0)==sign(0)`) quels que soient ses poids appris -- ça n'a rien à
+voir avec sa capacité à discriminer quoi que ce soit. Une fois ces
+égalités exclues (comme il se doit pour toute comparaison honnête, et
+comme c'est indispensable pour comparer équitablement à un modèle non
+linéaire qui n'a structurellement aucune raison de tomber pile sur 0),
+les chiffres ci-dessus sont les bons. Corrigé dans
+`train_pairwise_model.py` et `reference/diagnose_pairwise_metrics.py`.
 
-**Précision de signe sur paires serrées ajoutée en métrique permanente**
-dans `train_pairwise_model.py` (affichée à chaque entraînement, à côté de
-R²/MAE) -- elle prédit mieux l'ordre réel du gating que R²/MAE sur ces
-trois points de comparaison (ce n'est encore qu'un échantillon de 3,
-donc un signal fort mais pas une preuve définitive).
+Constat corrigé : le lien "précision sur paires serrées prédit le
+gating" ne tient PLUS aussi proprement qu'annoncé initialement -- k=5 est
+maintenant SOUS le hasard (47.9%) sur les paires serrées, pire que
+bootstrap gen1 (58.4%) qui pourtant perd plus largement au gating (7/30
+contre 9/30). La tranche serrée reste informative (k=1, le meilleur au
+gating, est aussi le seul dont aucune tranche n'est sous le hasard), mais
+ce n'est pas le prédicteur parfait annoncé initialement -- prudence sur
+toute conclusion tirée d'un échantillon de 3 modèles.
 
 ## Ré-entraînement pondéré vers les paires serrées : testé, négatif (18/08)
 
@@ -498,12 +501,18 @@ serrées. Implémenté dans `train_pairwise_model.py` (argument optionnel
 `tau` : poids = `1/(|diff|+tau)`). Testé sur `pairwise_dataset.npz` (le
 dataset k=5), trois façons :
 
-| Approche | Précision de signe, \|diff\|<3 |
+| Approche | Précision de signe, \|diff\|<3 (égalités exactes exclues) |
 |---|---|
-| Non pondéré (référence) | 69.4% |
-| Pondéré, tau ∈ {1.5, 3, 6, 10} | 69.4-69.6% (aucune tendance) |
-| Pondéré EXTRÊME (poids ×50 sur les paires serrées) | 69.2% |
-| Entraîné **exclusivement** sur les paires serrées (bypass total de la pondération) | 69.2% |
+| Non pondéré (référence) | 47.9% |
+| Pondéré, tau ∈ {1.5, 3, 6, 10} | 47.9-48.1% (aucune tendance) |
+| Pondéré EXTRÊME (poids ×50 sur les paires serrées) | 47.4% |
+| Entraîné **exclusivement** sur les paires serrées (bypass total de la pondération) | 47.3% |
+
+(Chiffres corrigés le même jour après découverte du bug de comptage des
+égalités exactes décrit plus haut -- la conclusion qualitative ne change
+pas, mais elle est encore plus nette : le modèle linéaire tourne
+**au niveau du hasard, voire en dessous**, sur les paires serrées, quelle
+que soit la pondération.)
 
 **Négatif, sans ambiguïté.** Même en supprimant purement et simplement
 toutes les paires à grand écart de l'entraînement (le cas extrême, où le
@@ -512,14 +521,11 @@ gros écarts), la précision sur paires serrées ne bouge pas d'un point.
 Ça élimine la fonction de perte comme cause : ce n'est pas que le
 compromis R²/MAE "vole" de la capacité aux paires serrées au profit des
 grosses -- c'est que le modèle linéaire sur ces 78 features **ne peut
-tout simplement pas** aller plus loin sur les paires serrées, quelle que
-soit la façon dont on pondère ou filtre les données d'entraînement.
-Plafond de capacité du modèle (ou de ses features), pas un problème
-d'optimisation. Une explication complémentaire, non testée séparément :
-une partie de ce ~30% d'erreur peut être du bruit irréductible dans
-l'étiquette elle-même (`yd` vient d'une moyenne de `k_rollout=5`
-rollouts, pas d'une vérité exacte) plutôt qu'un vrai déficit
-d'information dans les features.
+tout simplement pas** discriminer les paires serrées, quelle que soit la
+façon dont on pondère ou filtre les données d'entraînement. Plafond de
+capacité du modèle (ou de ses features), pas un problème d'optimisation
+-- voir la section suivante, qui teste directement si un modèle non
+linéaire fait mieux sur ce point précis.
 
 Pas de nouveau gating lancé pour cette tentative : les métriques offline
 ne bougeant pas de façon significative par rapport au modèle k=5 déjà
@@ -529,11 +535,57 @@ statistiquement indiscernable n'aurait rien appris de plus.
 **Bilan à ce stade** : le vrai facteur limitant identifié par cette
 session (18/08) n'est ni la distribution d'entraînement (bootstrap,
 testé négatif) ni la fonction de perte (pondération, testée négative) --
-c'est la capacité du modèle linéaire + features actuelles à discriminer
-des paires de coups presque équivalentes. Prochaine piste sérieuse, si
-cette investigation reprend : soit des features supplémentaires
-spécifiquement informatives sur les cas serrés (pas juste plus de
-volume de données), soit un modèle non linéaire correctement formulé et
-validé au-delà du stade offline (jamais atteint jusqu'ici, voir la
-tentative MLP pairwise plus haut) -- pas une nouvelle variante
-d'entraînement du modèle linéaire actuel.
+c'est la capacité du **modèle linéaire** à discriminer des paires de
+coups presque équivalentes (sur ces mêmes 78 features). Reste à savoir si
+c'est un plafond de MODÈLE (un non-linéaire ferait mieux sur les mêmes
+features) ou de FEATURES (aucun modèle ne peut faire mieux avec cette
+information). Voir la section suivante.
+
+## Un modèle non linéaire (Gradient Boosting) discrimine mieux les paires serrées (18/08)
+
+Suite logique : la tentative MLP pairwise précédente (voir plus haut) est
+non linéaire mais a échoué -- ça pourrait clore la question "un modèle
+plus expressif aide-t-il ?". Mais cette tentative n'a jamais été évaluée
+avec la métrique corrigée ci-dessus (elle a été rejetée hors ligne, sur
+R²/MAE honnête post-fuite, avant même d'atteindre le stade du gating) --
+donc pas de réponse propre à "un non-linéaire bat-il le linéaire sur les
+paires serrées, spécifiquement ?". Testé directement, en pur diagnostic
+(pas encore branché dans MCTS) : `HistGradientBoostingRegressor` de
+sklearn, entraîné sur la même cible `Xd -> yd` que le modèle linéaire,
+même split. Validation croisée à 4 blocs groupés par partie (pas juste un
+split unique), 6 configurations d'hyperparamètres (profondeur 2-6, taux
+d'apprentissage 0.03-0.05, L2 1-3) :
+
+| Modèle | Précision de signe CV, \|diff\|<3 (égalités exclues) |
+|---|---|
+| Linéaire (Ridge) | 47.7% ± 0.6% (sous le hasard) |
+| Gradient Boosting (HGB), 6 configs testées | 57.3-57.7% ± ~1% (stable sur toute la plage) |
+
+**Positif, et robuste** -- gain de ~10 points, insensible aux
+hyperparamètres testés (donc pas un coup de chance sur un tirage
+particulier). Sur le jeu de test unique (hors CV), le Gradient Boosting
+bat aussi le linéaire sur les tranches [3,8) et reste comparable sur les
+tranches larges (déjà faciles pour tout modèle). Contrairement à
+l'hypothèse envisagée après le rejet du MLP ("c'est un plafond de modèle,
+pas de fonction de perte, donc rien à attendre de plus"), il y a bien de
+la structure non linéaire exploitable dans ces 78 features que le modèle
+linéaire ne capte pas -- juste pas via l'architecture (MLP siamois) ni
+le protocole d'entraînement testés jusqu'ici.
+
+**Piège à éviter avant de brancher ça dans MCTS** : ce diagnostic entraîne
+`HistGradientBoostingRegressor` directement sur `Xd -> yd` (comme le
+modèle linéaire), ce qui donne un prédicteur de DIFFÉRENCE valide pour
+comparer deux candidats au même nœud, mais **ne se décompose pas** en
+fonction de valeur par état (`value(état) = w.feat(état)` marche
+seulement parce que le modèle est linéaire ; `arbre(a) - arbre(b) !=
+arbre(a-b)` pour un ensemble d'arbres). `leaf_eval(state) -> valeurs`
+attend une fonction par état, pas une fonction de paire -- brancher ce
+modèle tel quel demanderait soit un modèle de valeur ABSOLU par état
+(déjà tenté en MLP, négatif), soit une architecture siamoise (déjà
+tentée en MLP, négatif après correction de fuite). Piste la plus
+prometteuse pour éviter ce piège : utiliser le comparateur pairwise
+DIRECTEMENT là où `gen_pairwise_dataset.py` échantillonne déjà ses
+candidats -- au même nœud, dans `greedy_action` et dans le rollout de
+`search.py` -- comme règle de décision ("lequel des candidats est
+meilleur ?") plutôt que comme `leaf_eval` MCTS. Pas encore implémenté ;
+proposé à Mehdi avant d'investir dans cette intégration.
