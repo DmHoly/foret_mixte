@@ -22,6 +22,7 @@ Ce fichier sert d'index pour ne pas s'y perdre.
 | `pairwise_model_pre_clairiere_forte.joblib`, `pairwise_dataset_pre_clairiere_forte.npz` | Le modèle contrastif tel qu'il était **avant** le premier réentraînement du 16/08 -- entraîné sous l'ancienne heuristique de Clairière (toujours la carte la moins chère). C'est ce modèle périmé qui faisait perdre MCTS+forte face à Greedy+forte (12/30) ; le réentraînement (voir `bench_heuristics.py`) fait remonter le taux de victoire à ~59%. Gardé pour pouvoir reproduire la comparaison avant/après. |
 | `pairwise_model_stale_backup.joblib`, `pairwise_dataset_stale_backup.npz` | Snapshot du 15/08 19h48, avant le réentraînement "sous les règles actuelles" de cette même journée (commit `233b14e`) -- prédate même l'ajout des features Clairière (`clearing_size`/`clearing_min_cost`) au vecteur de features. Conservé comme point de repère le plus ancien. |
 | `pairwise_model_true_original_aligned.joblib`, `pairwise_model_retrain1_no_clearing_aligned.joblib` | Paire de modèles produits lors de l'expérience "ajouter les features Clairière au modèle de valeur" (commit `013edbc`, 15/08 19h57) : le premier reprend l'entraînement d'origine réaligné sur le nouveau schéma de features (colonnes Clairière à zéro) pour servir de témoin, le second est réentraîné avec les features Clairière réellement peuplées. Résultat **nul** (l'ajout de ces features n'a pas amélioré le jeu de façon mesurable) -- gardés comme trace de la tentative, pas comme candidats à adopter. |
+| `pairwise_model_bootstrap_gen1.joblib`, `pairwise_dataset_bootstrap_gen1.npz` | Génération 1 de la piste bootstrap MCTS façon AlphaZero (18/08) -- entraîné sur des trajectoires **MCTS**, pas greedy. Meilleur R²/MAE offline jamais mesuré (0.336/4.40) mais **rejeté au gating** contre B (7/30) -- voir la section "Génération 1 du bootstrap" plus bas pour le détail. |
 
 ## Comment regénérer le modèle vivant
 
@@ -285,11 +286,12 @@ incrémentale. **B (Greedy + ciblage carte forte + urgence Clairière)
 reste, avec une conviction plus forte que jamais, le meilleur bot du
 dépôt.**
 
-## Piste future (non implémentée) : bootstrap MCTS façon AlphaZero
+## Piste bootstrap MCTS façon AlphaZero
 
 Documentée ici sur demande de Mehdi (16/08) -- explique la logique, les
-étapes et le pourquoi, mais **rien de ce qui suit n'est codé**. C'est un
-plan, pas un résultat.
+étapes et le pourquoi. **Génération 1 implémentée et testée le 18/08, voir
+le résultat tout en bas de cette section** -- négatif, cohérent avec les 6
+tentatives précédentes.
 
 ### Le problème exact que ça cible
 
@@ -387,3 +389,65 @@ propres résultats, sans nouvelle vérité extérieure).
 Si cette piste est tentée un jour, commencer petit (une seule génération
 de bootstrap, 30 parties, 50 itérations MCTS) pour valider que le
 principe fonctionne avant d'investir dans plusieurs générations.
+
+## Génération 1 du bootstrap : implémentée et testée, résultat négatif (18/08)
+
+Exactement l'échelle recommandée ci-dessus : 30 parties, MCTS(50it.) des
+deux côtés (`reference/gen_pairwise_dataset_bootstrap.py`, sortie
+`pairwise_dataset_bootstrap_gen1.npz`). Correction minimale (option 1 de
+la section précédente) : le mécanisme d'étiquetage des paires (candidats
+à un même nœud, k=5 rollouts à seed commune, repris tel quel de
+`gen_pairwise_dataset.py`) est inchangé -- seule la trajectoire qui fait
+avancer la partie entre deux points d'échantillonnage change : MCTS avec
+le modèle vivant en `leaf_eval` (`VP.make_pairwise_hybrid_leaf_eval`), au
+lieu de l'auto-jeu greedy bruité utilisé par toutes les tentatives
+précédentes. Les deux heuristiques de `greedy_action` (`choose_draw_source`
+forte, `CLEARING_URGENCY_BONUS`) restent actives par défaut partout dans
+ce pipeline (rollouts de labellisation, mini-rollout du leaf_eval hybride
+des bots de self-play) -- **pas touchées**, contrairement à une session
+antérieure qui les avait débranchées pour générer des données et avait vu
+le classement du bot entraîné dessus s'effondrer (voir les fichiers
+`*_pre_clairiere_urgence*`/`*_pre_clairiere_forte*` plus haut). 4640
+paires collectées, ~5-6s/partie.
+
+Réentraîné (`train_pairwise_model.py pairwise_dataset_bootstrap_gen1.npz
+pairwise_model_bootstrap_gen1.joblib`) :
+
+| Modèle | Test R² | Test MAE |
+|---|---|---|
+| Bootstrap gen1 (trajectoires MCTS) | **0.336** | **4.40** (meilleur jamais mesuré, tous essais confondus) |
+| Linéaire k=5 (trajectoires greedy, référence précédente) | 0.254 | 4.50 |
+
+Meilleur score hors ligne jamais obtenu sur ce projet -- cohérent avec
+l'hypothèse de départ (échantillonner la distribution réellement visitée
+par MCTS devrait donner un signal plus pertinent). Gaté contre B avant
+toute promotion (`reference/gate_bootstrap_gen1.py`, MCTS(150it) avec ce
+modèle vs `greedy_action` B, sièges alternés, n=30) :
+
+**D(candidat bootstrap gen1) vs B : 7/30 (23%), écart moyen -72.9 (SE 21.2),
+médiane -25.5.**
+
+**Rejeté -- pas promu comme modèle vivant.** Pire que le modèle linéaire
+k=5 déjà rejeté (9/30) et que le tout premier modèle linéaire k=1 (13-15/30),
+malgré le meilleur R²/MAE jamais mesuré. Confirme le motif de la section
+précédente sur une 7e tentative, avec un angle différent (distribution
+d'entraînement corrigée, pas juste bruit de cible réduit) : le bootstrap
+change QUELS ÉTATS sont vus à l'entraînement, mais le facteur limitant
+identifié plus haut n'est pas la distribution des états -- c'est la
+capacité du modèle **linéaire** lui-même à discriminer des coups voisins
+avec la précision fine qu'exige UCT pour départager des branches proches,
+quelle que soit la distribution sur laquelle il est ajusté. Une seule
+génération ne suffit sans doute pas à trancher si le principe du bootstrap
+lui-même est viable (une génération peut juste être bruitée), mais vu le
+coût d'une génération (~4 min de génération + gating) pour un résultat
+dans la même fourchette que tout ce qui a déjà échoué, ce n'est pas jugé
+prioritaire d'enchaîner une génération 2 sans un changement d'architecture
+(modèle non linéaire correctement formulé, jamais validé faute d'avoir
+dépassé le stade offline -- voir la tentative MLP pairwise ci-dessus).
+
+**Modèle vivant inchangé : B (Greedy + Clairière forte + urgence) reste
+le bot le plus fort du dépôt.** `pairwise_dataset_bootstrap_gen1.npz` et
+`pairwise_model_bootstrap_gen1.joblib` gardés comme trace de cette
+tentative (philosophie du dépôt, voir en tête de ce fichier) ;
+`gen_pairwise_dataset_bootstrap.py` et `gate_bootstrap_gen1.py` restent
+réutilisables si une génération 2 est tentée un jour.

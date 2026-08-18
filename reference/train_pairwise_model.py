@@ -2,6 +2,12 @@
 (diff de features -> diff de gain réel, common random numbers). Voir
 gen_pairwise_dataset.py pour la justification. Sauvegarde le vecteur de
 poids dans reference/pairwise_model.joblib ; `value(état) = w . feat(état)`.
+
+Usage : `python train_pairwise_model.py [dataset.npz] [model_out.joblib]`
+(les deux arguments sont optionnels, défaut = le dataset/modèle vivants ;
+utilisé avec des chemins explicites par la piste bootstrap pour entraîner
+un modèle candidat sans écraser le modèle vivant avant gating, voir
+gen_pairwise_dataset_bootstrap.py).
 """
 import sys
 from pathlib import Path
@@ -15,7 +21,10 @@ HERE = Path(__file__).resolve().parent
 
 
 def main():
-    data = np.load(HERE / "pairwise_dataset.npz", allow_pickle=True)
+    dataset_path = Path(sys.argv[1]) if len(sys.argv) > 1 else HERE / "pairwise_dataset.npz"
+    out_path = Path(sys.argv[2]) if len(sys.argv) > 2 else HERE / "pairwise_model.joblib"
+
+    data = np.load(dataset_path, allow_pickle=True)
     Xd, yd = data["Xd"], data["yd"]
     feature_names = list(data["feature_names"])
 
@@ -50,9 +59,8 @@ def main():
     print(f"Test R^2  : {r2:.4f}")
     print(f"Test MAE  : {mae:.2f} pts (baseline 'aucune différence' : {baseline_mae:.2f} pts)")
 
-    out = HERE / "pairwise_model.joblib"
-    joblib.dump({"weights": model.coef_, "feature_names": feature_names}, out)
-    print(f"Modèle sauvegardé dans {out}")
+    joblib.dump({"weights": model.coef_, "feature_names": feature_names}, out_path)
+    print(f"Modèle sauvegardé dans {out_path}")
 
 
 if __name__ == "__main__":
