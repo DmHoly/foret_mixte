@@ -387,10 +387,26 @@ class MCTS:
     joueur), appelée sur l'état atteint après sélection/expansion, sans
     dérouler la partie plus loin. Par défaut (`leaf_eval=None`), le
     comportement est inchangé (rollout aléatoire biaisé).
+
+    `tiebreak` (optionnel, même signature que `greedy_action` :
+    `tiebreak(candidate_states, reference_state, observer) -> list[float]`) :
+    départage, UNE SEULE FOIS à la fin de `choose()` (pas à l'intérieur
+    des simulations), les enfants de la racine dont le nombre de visites
+    est à moins de `tiebreak_margin` (fraction du max, défaut 20%) du
+    meilleur trouvé. Volontairement PAS branché dans `rollout()` : sur un
+    échantillon réel, ~82% des tours à plusieurs candidats déclenchent un
+    "presque à égalité" côté `greedy_action` -- brancher le modèle
+    Gradient Boosting À CHAQUE étape simulée multiplierait le temps par
+    décision par un facteur de plusieurs dizaines (des centaines
+    d'itérations, chacune avec plusieurs coups de rollout). Un appel
+    unique par décision réelle, lui, coûte ~2-3 ms de plus sur un budget
+    de dizaines à centaines de ms -- négligeable. Voir reference/MODELS.md,
+    "Comparateur pairwise dans greedy_action".
     """
 
     def __init__(self, observer, iterations=200, seed=None, c=C_PUCT,
-                 rollout_depth=30, leaf_eval=None, risk_k=0.0):
+                 rollout_depth=30, leaf_eval=None, risk_k=0.0,
+                 tiebreak=None, tiebreak_margin=0.2):
         self.observer = observer
         self.iterations = iterations
         self.rollout_depth = rollout_depth
@@ -399,6 +415,8 @@ class MCTS:
         self.root = Node(None, None, None)
         self.leaf_eval = leaf_eval
         self.risk_k = risk_k
+        self.tiebreak = tiebreak
+        self.tiebreak_margin = tiebreak_margin
 
     def advance(self, action):
         """Réutilise le sous-arbre correspondant au coup effectivement joué."""
@@ -449,7 +467,27 @@ class MCTS:
                       if a in legal]
         if not candidates:
             return _fallback_action(game)
-        return max(candidates)[1]
+
+        best_visits, best_action = max(candidates)
+
+        if self.tiebreak is not None and best_visits > 0:
+            threshold = best_visits * (1.0 - self.tiebreak_margin)
+            near = [a for v, a in candidates if a != best_action and v >= threshold]
+            if near:
+                observer = game.current
+                best_state = game.clone()
+                best_state.apply(best_action)
+                near_states = []
+                for a in near:
+                    state = game.clone()
+                    state.apply(a)
+                    near_states.append(state)
+                scores = self.tiebreak(near_states, best_state, observer)
+                top = max(range(len(scores)), key=lambda i: scores[i])
+                if scores[top] > 0:
+                    best_action = near[top]
+
+        return best_action
 
 
 def play_game(policies, n_players=2, seed=None, max_turns=1000):
