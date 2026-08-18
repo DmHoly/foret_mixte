@@ -24,7 +24,7 @@ Ce fichier sert d'index pour ne pas s'y perdre.
 | `pairwise_model_true_original_aligned.joblib`, `pairwise_model_retrain1_no_clearing_aligned.joblib` | Paire de modèles produits lors de l'expérience "ajouter les features Clairière au modèle de valeur" (commit `013edbc`, 15/08 19h57) : le premier reprend l'entraînement d'origine réaligné sur le nouveau schéma de features (colonnes Clairière à zéro) pour servir de témoin, le second est réentraîné avec les features Clairière réellement peuplées. Résultat **nul** (l'ajout de ces features n'a pas amélioré le jeu de façon mesurable) -- gardés comme trace de la tentative, pas comme candidats à adopter. |
 | `bootstrap_dataset_pilot1_50it.npz`, `bootstrap_model_pilot1_50it.joblib` | Pilote 1 du bootstrap MCTS façon AlphaZero (17/08, voir "Résultat du pilote 1" plus bas) : auto-jeu MCTS 50 it. + cible = stats de l'arbre, au lieu d'auto-jeu greedy + rollout séparé. Résultat **négatif** au gating (perd contre le modèle officiel ET contre B) -- gardés comme trace, `pairwise_model.joblib` reste inchangé. |
 | `bootstrap_dataset_pilot2_150it.npz`, `bootstrap_model_pilot2_150it.joblib` | Pilote 2 du bootstrap MCTS (17/08, voir "Résultat du pilote 2" plus bas) : même méthode que le pilote 1 mais budget MCTS triplé (150 it.) et `min_visits` relevé (5). Progrès net (R² doublé, quasi-parité contre B) mais **pas encore promu** (ne bat pas encore O) -- gardés comme trace/point de départ pour une éventuelle suite, `pairwise_model.joblib` reste inchangé. |
-| `bootstrap_dataset.npz`, `bootstrap_model.joblib` | Pilote 3, ajoute une cible de politique (PUCT) et retire l'heuristique `greedy_action` de l'évaluation -- voir "Pilote 3" plus bas pour le statut courant. |
+| `bootstrap_dataset_pilot3_puct.npz`, `bootstrap_model_pilot3_puct.joblib`, `policy_model_pilot3_puct.joblib` | Pilote 3 : PUCT (prior de politique) + évaluation sans rollout (voir "Pilote 3" plus bas). Résultat **fortement négatif** (0/10 contre O et B, 85% de coups sous-optimaux mesurés) -- gardés comme trace d'un piège méthodologique identifié (surapprentissage sur un signal circulaire), pas comme candidats. `search.py`/`value_policy.py` gagnent quand même le mécanisme PUCT en tant que tel (réutilisable proprement, voir plus bas). |
 
 ## Comment regénérer le modèle vivant
 
@@ -569,3 +569,113 @@ gagnant ou non. C'est précisément ce que l'approche contrastive (comparer
 deux coups depuis le MÊME état, mêmes pioches ensuite via *common random
 numbers*) a été conçue pour corriger dès le départ -- voir la docstring
 de `gen_pairwise_dataset.py`. Piste écartée, pas de suite prévue.
+
+## Pilote 3 : PUCT (réseau de politique) + évaluation sans heuristique (17/08)
+
+Question de Mehdi : comment marche un vrai AlphaZero (aucune heuristique
+câblée, réseau de politique en plus de la valeur), et peut-on essayer
+d'entraîner un réseau de politique nous aussi -- explicitement "sans
+heuristique à la base, chaque action dans l'arbre des possibilités".
+
+**Ce qui a été construit** (tout committé, réutilisable même après ce
+résultat négatif) :
+
+- `search.py` : `Node.uct_select` accepte un `prior` optionnel -> formule
+  PUCT standard (`exploit + c*P(a)*sqrt(total)/(1+visites)`), qui décide
+  DANS QUEL ORDRE explorer les actions jamais essayées au lieu de les
+  filtrer -- `legal_actions()` reste la seule source de vérité, aucune
+  action n'est retirée de l'arbre. Le prior est mis en cache PAR NŒUD
+  (`Node.prior`), calculé une fois par action rencontrée, pas à chaque
+  visite. Rétrocompatible (`policy_prior=None` partout ailleurs dans le
+  dépôt, comportement UCT inchangé, vérifié par tests/ + bench.py).
+- `value_policy.make_policy_prior` : même forme que le modèle de valeur
+  (`w . feat(état après le coup)`), poids différents (`policy_model.joblib`).
+- `gen_bootstrap_dataset.py` : récolte en plus `yp = log(visites[ai]) -
+  log(visites[aj])` (la distribution de visites de la racine EST la
+  politique améliorée façon AlphaZero, `π ∝ N(s,a)`, déjà calculée
+  gratuitement par `MCTS.choose()`), et bascule le `leaf_eval` de
+  l'auto-jeu sur `make_pairwise_leaf_eval` (évaluation directe, SANS le
+  rollout court basé sur `greedy_action` -- qui contient les bonus ajustés
+  à la main, `tree_bonus`/`CLEARING_URGENCY_BONUS`/`SYCAMORE_ROLLOUT_BONUS`)
+  pour retirer l'heuristique de la base, comme demandé. `choose_draw_source`/
+  `choose_payment` restent heuristiques (déjà tenté et abandonné pour la
+  Clairière, `git log 3e1a79b`/`5506f89`), volontairement hors scope.
+
+**Génération** : 30 parties, 150 it. MCTS, 14095 paires en 143s (bien plus
+rapide que les pilotes 1/2 -- sans rollout, chaque simulation est moins
+chère). Jeux notablement plus courts (83-115 tours contre 142-219 pour les
+pilotes précédents), signe déjà que le style de jeu change fortement sans
+la correction heuristique.
+
+**Entraînement**, résultat offline en apparence excellent -- et c'est le
+piège :
+
+| Modèle | R² test | MAE |
+|---|---|---|
+| Valeur (`bootstrap_model_pilot3_puct.joblib`, cible `yd`) | **0,797** | 0,09 (rang [0,1]) |
+| Politique (`policy_model_pilot3_puct.joblib`, cible `yp`) | **0,789** | 0,21 (log visites) |
+
+Bien au-dessus de tous les R² mesurés jusqu'ici dans ce dépôt (0,17 pour
+le modèle officiel, 0,07 pour le pilote 2). Signal d'alarme a posteriori,
+pas une bonne nouvelle -- voir plus bas.
+
+**Gating** (`bench_bootstrap.py --n 10 --iterations 100`) :
+
+| Match | Score | Écart moyen (SE) |
+|---|---|---|
+| N vs O | **0/10** | -142,0 (15,5) |
+| N vs B | **0/10** | -243,1 (24,8) |
+| O vs B | 3/10 | -56,8 (28,8) |
+
+N perd **toutes** les parties, avec des scores anormalement bas (~120-130
+points contre 250-400 habituellement pour une partie complète) -- pas
+"un peu moins bon", quelque chose ne va pas structurellement.
+
+**Diagnostic, confirmé par instrumentation directe** (pas une hypothèse en
+l'air) : sur une partie N-vs-N instrumentée, 56 des 66 poses (85%)
+laissent plus de 5 points sur la table par rapport au meilleur coup
+disponible au même instant, avec un regret moyen de **15,3 points par
+coup**. Écartés par l'instrumentation : ni un problème de plantation
+d'arbres (8-10 arbres plantés, rythme normal), ni un softmax du prior
+anormalement concentré (`maxprob` reste dans une fourchette raisonnable,
+0,03-0,4 selon le nombre de candidats). Les poids du modèle de valeur
+pointent vers la cause : les plus gros coefficients portent sur des
+PROPORTIONS D'ESPÈCES D'ARBRES (Tilleul +0,16, Chêne -0,14, Bouleau -0,10,
+Hêtre +0,10, Sapin Douglas -0,09, Sycomore +0,08) -- aucun principe
+stratégique connu ne justifie qu'une forêt à dominante Tilleul batte
+systématiquement une forêt à dominante Chêne. C'est la signature d'un
+surapprentissage sur du bruit d'échantillon.
+
+**Mécanisme le plus probable** : sans rollout, la plupart des évaluations
+de feuille se font à seulement 1 coup du nœud racine (le facteur de
+branchement de plusieurs centaines d'actions laisse peu de nœuds
+profondément explorés à 150 itérations) -- donc `child.value/child.visits`
+(la cible `yd`) reflète surtout le jugement du modèle OFFICIEL
+(`pairwise_model.joblib`, utilisé comme `leaf_eval` pendant CETTE
+génération) sur l'état à 1 coup, binarisé par `reward_vector` (victoire/
+défaite/nul, pas un score continu) et moyenné sur des redéterminisations
+de la main adverse. `bootstrap_model`/`policy_model` apprennent alors à
+reproduire ce signal binarisé et bruité, pas une vraie valeur stratégique
+-- et avec seulement 30 parties (~30 trajectoires réellement
+indépendantes, malgré 14095 paires) pour 78 features, le terrain est
+propice à capter des corrélations parasites plutôt que le vrai signal.
+Cohérent avec `cos(bootstrap_model, policy_model) = 0,99` (quasiment le
+même vecteur de poids) et `cos(bootstrap_model, pairwise_model officiel)
+= 0,09` (quasi orthogonal) : les deux nouveaux modèles ont appris la MÊME
+chose entre eux, mais quelque chose de très différent du modèle officiel
+bien calibré.
+
+**Ce résultat négatif teste la combinaison (PUCT + zéro rollout + petit
+dataset), pas le principe "réseau de politique" isolément** -- la question
+initiale de Mehdi (un réseau de politique, séparé de la valeur) reste
+non tranchée proprement : ici elle est confondue avec "retirer TOUT
+ancrage heuristique/rollout de l'évaluation", qui s'est révélé être le
+vrai coupable probable. Piste de suite, non lancée faute de budget dans
+cette session : réintroduire le rollout court (`make_pairwise_hybrid_leaf_eval`,
+comme les pilotes 1/2 -- ancrage réel, pas juste une évaluation statique
+à 1 coup) et ajouter le prior PUCT PAR-DESSUS cette base qui a déjà fait
+ses preuves, au lieu de tout retirer d'un coup. Isolerait proprement
+l'apport du prior de politique de celui de la suppression du rollout.
+
+`pairwise_model.joblib` (modèle officiel) reste inchangé, jamais affecté
+par ce pilote.
