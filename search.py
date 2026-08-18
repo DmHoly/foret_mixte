@@ -86,7 +86,8 @@ def _fallback_action(game):
 
 
 def greedy_action(game, rng, epsilon=0.0, candidates=None, tree_bonus=6,
-                   tree_combo_bonus=None, clearing_urgency=CLEARING_URGENCY_BONUS):
+                   tree_combo_bonus=None, clearing_urgency=CLEARING_URGENCY_BONUS,
+                   tiebreak=None, tiebreak_margin=3.0):
     """Coup maximisant le gain immédiat, avec un correctif d'ouverture.
 
     Un arbre ne rapporte presque rien à la pose mais ouvre 4 emplacements.
@@ -113,6 +114,22 @@ def greedy_action(game, rng, epsilon=0.0, candidates=None, tree_bonus=6,
     concurrence avec les poses de la main : sans ça, `best_gain > 0` fait
     toujours préférer poser une carte moyenne de la main plutôt que sécuriser
     une carte forte contestée, qui peut disparaître au tour de l'adversaire.
+
+    `tiebreak` (optionnel, `tiebreak(state_a, state_b, observer) -> float`,
+    positif si `a` est jugé meilleur que `b`) : départage les candidats
+    dont le gain exact est à moins de `tiebreak_margin` points du meilleur
+    trouvé -- PAS en concurrence avec le delta exact (qui reste le
+    classement principal), seulement un second tour pour les cas où ce
+    delta ne suffit déjà pas à distinguer les candidats de façon fiable.
+    Voir `reference/value_policy.make_pairwise_gbm_tiebreak` et
+    `reference/MODELS.md` ("Un modèle non linéaire discrimine mieux les
+    paires serrées") : un modèle linéaire tourne au niveau du hasard sur
+    cette tranche précise (delta exact < 3 pts) ; un Gradient Boosting
+    entraîné sur les mêmes paires y gagne ~10 points de précision de
+    signe. Coûte un clone de partie par candidat proche du meilleur --
+    non actif par défaut (opt-in), les décisions réelles et les rollouts
+    existants ne changent pas de comportement tant que ce paramètre n'est
+    pas fourni explicitement.
     """
     actions = game.legal_actions()
     if len(actions) == 1:
@@ -132,6 +149,7 @@ def greedy_action(game, rng, epsilon=0.0, candidates=None, tree_bonus=6,
     n_trees = forest.n_trees
 
     best, best_gain = None, -1e9
+    gains = {}
     for a in plays:
         if a[0] == "tree":
             gain = forest.delta_tree(a[1]) + tree_bonus / (1 + n_trees)
@@ -147,8 +165,21 @@ def greedy_action(game, rng, epsilon=0.0, candidates=None, tree_bonus=6,
             forest.add_dweller(tree_idx, pos, did)
             gain = forest.score() - base
             forest.undo_dweller(tree_idx, pos, did)
+        gains[a] = gain
         if gain > best_gain:
             best, best_gain = a, gain
+
+    if tiebreak is not None:
+        near = [a for a in plays if a != best and gains[a] >= best_gain - tiebreak_margin]
+        if near:
+            observer = game.current
+            best_state = game.clone()
+            best_state.apply(best)
+            for a in near:
+                state = game.clone()
+                state.apply(a)
+                if tiebreak(state, best_state, observer) > 0:
+                    best, best_state = a, state
 
     if (clearing_urgency and ("draw",) in actions
             and clearing_urgency > best_gain

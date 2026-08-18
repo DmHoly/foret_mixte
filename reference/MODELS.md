@@ -10,8 +10,9 @@ Ce fichier sert d'index pour ne pas s'y perdre.
 
 | Fichier | Rôle |
 |---|---|
-| `pairwise_model.joblib` | Modèle de valeur contrastif **utilisé par défaut** par `value_policy.make_pairwise_hybrid_leaf_eval()` (donc par tout MCTS instancié sans `model_path` explicite). Réentraîné le 16/08 (2e fois) avec `gen_pairwise_dataset.py` + `train_pairwise_model.py` sous le code actuel : heuristique `choose_draw_source` **forte** + urgence Clairière (`CLEARING_URGENCY_BONUS`) dans `greedy_action`. |
-| `pairwise_dataset.npz` | Dataset de paires (diff features -> diff gain réel) ayant servi à entraîner `pairwise_model.joblib` ci-dessus. 150 parties, 21468 paires, 78 features. |
+| `pairwise_model.joblib` | Modèle de valeur contrastif **linéaire**, utilisé par `value_policy.make_pairwise_hybrid_leaf_eval()` (donc par tout MCTS instancié sans `model_path` explicite) -- seul modèle qui se décompose en fonction de valeur par état, donc le seul utilisable comme `leaf_eval` MCTS pour l'instant. Réentraîné le 16/08 (2e fois) avec `gen_pairwise_dataset.py` + `train_pairwise_model.py` sous le code actuel : heuristique `choose_draw_source` **forte** + urgence Clairière (`CLEARING_URGENCY_BONUS`) dans `greedy_action`. |
+| `pairwise_gbm_model.joblib` | Modèle de comparaison pairwise **Gradient Boosting**, utilisé par `value_policy.make_pairwise_gbm_tiebreak()` -- branché dans `search.greedy_action(..., tiebreak=...)` pour départager les candidats presque à égalité de gain exact (opt-in, PAS actif par défaut). Entraîné le 18/08 par `train_pairwise_gbm.py` sur le même dataset que le modèle linéaire. **Bat B 74/100 au gating** (voir "Comparateur pairwise dans greedy_action" plus bas) -- le bot le plus fort du dépôt à ce jour, mais utilisable uniquement pour des décisions réelles (trop coûteux pour un rollout MCTS en l'état, voir cette même section). |
+| `pairwise_dataset.npz` | Dataset de paires (diff features -> diff gain réel) ayant servi à entraîner `pairwise_model.joblib` ET `pairwise_gbm_model.joblib` ci-dessus. 150 parties, 21468 paires, 78 features. |
 | `value_model.joblib`, `value_dataset.npz` | Modèle de valeur **absolu** (MLP), approche antérieure au modèle contrastif. Toujours chargé par `value_policy.make_leaf_eval()`/`make_hybrid_leaf_eval()`, utilisé par `bench.py` comme point de comparaison. Limite connue : MAE (~12 pts) plus grande que l'écart réel entre deux coups candidats (~9 pts) -- voir la docstring de `gen_pairwise_dataset.py`, c'est justement pour corriger ce défaut que l'approche contrastive a été introduite. |
 
 ## Sauvegardes historiques (non chargées par défaut, gardées pour comparaison/rollback)
@@ -589,3 +590,57 @@ candidats -- au même nœud, dans `greedy_action` et dans le rollout de
 `search.py` -- comme règle de décision ("lequel des candidats est
 meilleur ?") plutôt que comme `leaf_eval` MCTS. Pas encore implémenté ;
 proposé à Mehdi avant d'investir dans cette intégration.
+
+## Comparateur pairwise dans greedy_action : implémenté, positif (18/08)
+
+Suite du diagnostic ci-dessus, comme proposé. `search.greedy_action`
+accepte désormais un paramètre optionnel `tiebreak(state_a, state_b,
+observer) -> float` (opt-in, `None` par défaut -- comportement inchangé
+si non fourni). Intégration choisie pour éviter le piège de
+décomposabilité : le delta exact reste le classement PRINCIPAL des
+candidats (inchangé) ; seuls les candidats à moins de `tiebreak_margin`
+(3 pts par défaut, la tranche validée par
+`diagnose_nonlinear_capacity.py`) du meilleur gain exact sont départagés
+par le modèle, par tournoi glissant (candidat courant contre le
+challenger suivant, un `game.clone()+apply()` par candidat proche --
+voir `search.greedy_action` pour le détail). `reference/value_policy.py`
+fournit `make_pairwise_gbm_tiebreak()`, qui charge
+`pairwise_gbm_model.joblib` (entraîné par `train_pairwise_gbm.py`, voir
+plus haut).
+
+Gaté contre B (`reference/gate_pairwise_tiebreak.py`, greedy_action avec
+tiebreak vs greedy_action sans, sièges alternés, n=100) :
+
+**E (greedy + tiebreak GBM) vs B : 74/100, écart moyen +50.1 (SE 10,6),
+médiane +50,0.**
+
+**Positif, net, et le premier résultat de cette investigation à
+effectivement battre B.** ~4.7 écarts-types au-dessus de zéro -- pas un
+bruit statistique. Confirme que le signal détecté hors ligne (Gradient
+Boosting +10 pts de précision de signe sur les paires serrées, validé en
+CV) se traduit bien en victoires réelles une fois branché correctement
+(en évitant le piège `leaf_eval`/décomposabilité qui avait fait échouer
+le MLP). **E est, à ce jour, le bot le plus fort du dépôt** -- toutes
+les mentions antérieures de "B reste le meilleur bot du dépôt" dans ce
+fichier sont datées (avant le 18/08 après-midi) et doivent être lues
+comme telles.
+
+**Limite importante, non résolue** : le coût. Une partie complète
+gloutonne SANS tiebreak prend ~18 ms (`bench.py`) ; AVEC tiebreak sur un
+seul des deux joueurs, ~2,6 s -- environ ×140. Viable pour des décisions
+réelles (une par tour, un seul joueur) ou pour du gating comme ci-dessus,
+mais **PAS encore utilisable dans le rollout MCTS en l'état** (`greedy_action`
+y est appelé des dizaines de fois par simulation, des centaines de
+simulations par décision -- le coût exploserait). Brancher le tiebreak
+dans MCTS (rollout et/ou politique de sélection) est la suite naturelle
+si ce résultat se confirme, mais demande d'abord de réduire ce coût
+(candidats proches moins nombreux, modèle plus léger, ou clone moins
+cher que `Game.clone()` complet pour ce cas précis) -- pas fait, proposé
+à Mehdi avant d'investir dedans.
+
+Pas encore promu comme comportement par défaut de `greedy_action` :
+`tiebreak` reste opt-in (`None` par défaut) pour ne pas forcer une
+dépendance à `sklearn`/`joblib`/`reference/` dans `search.py`, qui reste
+volontairement libre de ces dépendances (cohérent avec le design déjà en
+place pour `leaf_eval` de MCTS, fourni par `reference/value_policy.py`
+plutôt que câblé en dur).

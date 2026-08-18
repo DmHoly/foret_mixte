@@ -240,3 +240,40 @@ def make_pairwise_mlp_hybrid_leaf_eval(model_path=None, short_rollout_depth=10, 
         return out
 
     return leaf_eval
+
+
+def load_pairwise_gbm_model(path=None):
+    """Modèle de comparaison pairwise Gradient Boosting (voir
+    train_pairwise_gbm.py) : contrairement à `load_pairwise_model`, pas
+    décomposable en fonction de valeur par état (`arbre(a) - arbre(b) !=
+    arbre(a-b)`) -- utilisable uniquement en comparaison directe de deux
+    états via `make_pairwise_gbm_tiebreak`, jamais comme `leaf_eval` MCTS.
+    Voir reference/MODELS.md, "Un modèle non linéaire (Gradient Boosting)
+    discrimine mieux les paires serrées"."""
+    path = path or (HERE / "pairwise_gbm_model.joblib")
+    key = str(path)
+    if key not in _MODEL_CACHE:
+        _MODEL_CACHE[key] = joblib.load(path)
+    return _MODEL_CACHE[key]
+
+
+def make_pairwise_gbm_tiebreak(model_path=None):
+    """Comparateur pour `search.greedy_action(..., tiebreak=...)` :
+    départage deux candidats presque à égalité de gain exact via le
+    modèle Gradient Boosting entraîné sur les mêmes paires (diff de
+    features -> diff de gain réel, voir gen_pairwise_dataset.py) que le
+    modèle linéaire -- mais gagne ~10 points de précision de signe sur
+    cette tranche précise (voir reference/MODELS.md). Retourne
+    `tiebreak(state_a, state_b, observer) -> float`, positif si `a` est
+    jugé meilleur que `b`."""
+    model = load_pairwise_gbm_model(model_path)
+
+    def tiebreak(state_a, state_b, observer):
+        scores_a = state_a.scores()
+        scores_b = state_b.scores()
+        fa = F.extract_features(state_a, observer) + [scores_a[observer]]
+        fb = F.extract_features(state_b, observer) + [scores_b[observer]]
+        diff = np.asarray(fa, dtype=np.float32) - np.asarray(fb, dtype=np.float32)
+        return float(model.predict(diff.reshape(1, -1))[0])
+
+    return tiebreak
