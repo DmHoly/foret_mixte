@@ -852,11 +852,32 @@ tout seul, sans avoir besoin d'aucune prime artificielle.
   premiers arbres : c'est exactement les ~7% de poses où `delta_tree`
   ne suffit pas encore.
 
-**Corrigé** : la docstring de `search.greedy_action` sera reformulée
-pour ne plus affirmer que le delta est "quasi nul" en général -- ce
-n'est vrai qu'en ouverture. `search.py` reste inchangé pour l'instant
-(la prime actuelle ne fait toujours pas de mal, elle est juste sans
-effet 93% du temps) ; piste suivante proposée par Mehdi : borner la
-prime à l'ouverture (peu d'arbres/peu d'habitants scorants en jeu)
-plutôt que de la calculer à chaque pose pour un effet nul le reste de la
-partie -- voir la section suivante.
+**Corrigé** : la docstring de `search.greedy_action` reformulée pour ne
+plus affirmer que le delta est "quasi nul" en général -- ce n'est vrai
+qu'en ouverture (voir `search.py`, commit du 18/08 soir).
+
+### Piste ouverture : geler la prime au-delà d'un seuil d'arbres -- neutre, vérifié (18/08)
+
+Suite logique proposée par Mehdi : si la prime ne sert qu'à l'ouverture,
+la geler à 0 dès que `n_trees` dépasse un seuil (au lieu de calculer le
+déficit à chaque pose) devrait être neutre en force. Vérifié directement
+sur des parties réellement jouées (sièges alternés, mêmes graines) :
+
+| Seuil (`n_trees <`) | Adversaire | n | Résultat |
+|---|---|---|---|
+| 2 | défaut actuel | 500 | 254/500 (50.8%), -4.9 (SE 4.2) |
+| 4 | défaut actuel | 1000 | 505/1000 (50.5%), -2.3 (SE 3.2) |
+| 4 | E (tiebreak GBM des deux côtés) | 300 | 153/300 (51.0%), +1.2 (SE 6.1) |
+| 6 | défaut actuel | 500 | 264/500 (52.8%), -0.7 (SE 4.2) |
+| 8 | défaut actuel | 500 | 264/500 (52.8%), -0.7 (SE 4.2) |
+
+**Confirme sans ambiguïté, sur des parties jouées et pas seulement en
+diagnostic statique, que la prime est inerte au-delà de l'ouverture.**
+Geler le calcul est une simplification neutre en force (jamais un gain
+ni une perte mesurable sur aucune config testée) -- pas encore adoptée
+par défaut dans `search.py` : le coût du calcul en trop (quelques
+additions par décision) est négligeable face au tiebreak GBM ou à MCTS,
+donc l'intérêt est surtout documentaire (le code refléterait alors
+explicitement ce que le comportement mesuré montre déjà), pas une
+optimisation qui vaille la peine seule. À adopter si `search.py` est
+retouché pour d'autres raisons dans cette zone, sinon laissé tel quel.
