@@ -881,3 +881,62 @@ donc l'intérêt est surtout documentaire (le code refléterait alors
 explicitement ce que le comportement mesuré montre déjà), pas une
 optimisation qui vaille la peine seule. À adopter si `search.py` est
 retouché pour d'autres raisons dans cette zone, sinon laissé tel quel.
+
+## Décomposition du score final par mécanisme -- où sont les gros leviers (18/08)
+
+Question de Mehdi, suite naturelle : si planter des arbres rapporte des
+points concrets (~7pts/arbre en moyenne, voir plus haut), quels sont les
+GROS leviers de score en général -- additif brut, multiplicatif
+(cervidés, lapin/renard...), séries à paliers (Marronnier, papillons...),
+seuils tout-ou-rien (Lynx, chauve-souris...) ?
+
+Outil (`reference/gen_score_breakdown.py`) : copie carte-à-carte de
+`scoring_ref.score_forest` (l'oracle de scoring littéral, une règle =
+une fonction) qui accumule les points par carte au lieu de les sommer --
+appliqué aux forêts finales de E (greedy + tiebreak GBM) en self-play,
+300 parties (600 forêts), sièges alternés.
+
+**Cartes individuelles les plus lourdes** (pts/forêt, % du score total) :
+
+| Carte | pts/forêt | % du score |
+|---|---|---|
+| ROE_DEER (Chevreuil) | 54.4 | 11.7% |
+| SYCAMORE (Sycomore) | 48.7 | 10.5% |
+| BEECH_MARTEN (Fouine) | 39.6 | 8.5% |
+| RED_DEER (Cerf) | 32.3 | 6.9% |
+| TREE_FERNS (Fougère arborescente) | 23.2 | 5.0% |
+| WOOD_ANT (Fourmi des bois) | 21.5 | 4.6% |
+| HORSE_CHESTNUT (Marronnier, set) | 20.5 | 4.4% |
+| OAK (Chêne, seuil 8 espèces) | 20.2 | 4.4% |
+| FALLOW_DEER (Daim) | 19.2 | 4.1% |
+
+**Regroupé par mécanisme** :
+
+| Levier | pts/forêt | % du score | Cartes |
+|---|---|---|---|
+| **Cervidés (multiplicatif)** | **117.8** | **25.3%** | ROE_DEER (×symboles de l'arbre porteur), RED_DEER (×Arbre+Plante), FALLOW_DEER (×ClovenhoofedAnimal), WOLF (×Cervidés) |
+| Multiplicatif "autres types" | 84.6 | 18.2% | TREE_FERNS (×Amphibien), WOOD_ANT (×slots Bottom occupés), GOSHAWK (×Oiseau), BULLFINCH (×Insecte), BLACKBERRIES (×Plante), HEDGEHOG (×Papillon), STAG_BEETLE (×PawedAnimal), GNAT (×Bat), TREE_FROG (×Moustique/GNAT) |
+| Arbres multiplicatifs | 58.5 | 12.6% | SYCAMORE (×nb d'arbres), SILVER_FIR (×slots occupés sur lui-même) |
+| Arbres à seuil | 49.9 | 10.7% | OAK (10pts si ≥8 espèces), BEECH (5pts si ≥4 Hêtres), LINDEN (majorité), MOSS (10pts si ≥10 symboles arbre) |
+| **Fouine seule (BEECH_MARTEN)** | **39.6** | **8.5%** | 5pts × nb d'arbres à 4/4 slots -- une seule carte, quasi aussi lourde qu'une catégorie entière |
+| Séries à paliers | 37.7 | 8.1% | HORSE_CHESTNUT, FIRE_SALAMANDER, FIREFLIES, BUTTERFLY_SETS, chauves-souris (5pts/carte si ≥3 espèces) |
+| Seuil binaire divers | 38.6 | 8.3% | LYNX (si Chevreuil présent), WILD_BOAR (si Loir gris... SQUEAKER), WILD_STRAWBERRIES, GREAT_SPOTTED_WOODPECKER (majorité), COMMON_TOAD, EUROPEAN_FAT_DORMOUSE, CHAFFINCH, RED_SQUIRREL |
+| Additif fixe | 24.5 | 5.3% | DOUGLAS_FIR, BIRCH, TAWNY_OWL, POND_TURTLE, EURASIAN_JAY, EUROPEAN_BADGER, SQUEAKER, Grotte |
+| Lapin / renard | 13.5 | 2.9% | EUROPEAN_HARE (×lièvres), RED_FOX (2×lièvres) |
+
+**Le levier dominant, de loin : les cervidés (25.3% du score à eux
+quatre), avec ROE_DEER seul déjà la carte la plus lourde du jeu
+(11.7%).** Confirme et affine le résultat précédent sur `delta_tree` :
+les arbres ne sont pas juste un levier "de base" séparé -- ils sont le
+SUBSTRAT qui alimente la plupart des gros leviers. ROE_DEER compte les
+**symboles d'arbre** (chaque arbre + chaque habitant qu'il porte), pas
+les arbres physiques seuls, donc planter massivement nourrit ce levier
+en plus des catégories "arbres" listées à part (58.5 + 49.9 = 108.4
+pts/forêt, 23.3%, rien que pour les deux catégories explicitement
+arborescentes) -- la vraie contribution des arbres au score, en comptant
+leur effet indirect via ROE_DEER/WOOD_ANT/MOSS, est donc encore plus
+large que ces deux lignes seules.
+
+**BEECH_MARTEN (Fouine) mérite un coup d'œil à part** : une seule carte
+pèse 8.5% du score total, presque autant qu'une catégorie entière à elle
+seule -- prochaine piste demandée par Mehdi.
