@@ -20,6 +20,7 @@ validé contre cette référence sur 1700 forêts aléatoires (`tests/test_rules
 - [Fonctions de valeur pour MCTS](#fonctions-de-valeur-pour-mcts)
 - [Force intrinsèque des cartes](#force-intrinsèque-des-cartes)
 - [Guides de jeu (combos et tactique)](#guides-de-jeu-combos-et-tactique)
+- [Jouer contre le bot](#jouer-contre-le-bot)
 - [Limitations connues](#limitations-connues)
 
 ## Installation
@@ -87,6 +88,8 @@ python bench.py mcts_pairwise_hybrid 300 8 10       # MCTS (config recommandée)
 | `reference/bench_heuristics.py` | Tournoi rond-robin {Greedy, MCTS} x {Clairière forte, Clairière faible} : isole l'apport de la politique de décision de celui de l'heuristique de pioche. |
 | `reference/gen_combo_guide.py` | Génère `docs/combo_guide.html` et `docs/tactical_guide.html`, voir [guides de jeu](#guides-de-jeu-combos-et-tactique). |
 | `reference/gen_technique_guide.py` | Génère `docs/technique_guide.html` (mécanique de jeu coup par coup), voir [guides de jeu](#guides-de-jeu-combos-et-tactique). |
+| `reference/gen_decisive_guide.py` | Génère `docs/decisive_guide.html` (choix évidents vs décisifs de E sur ses meilleures parties), voir [guides de jeu](#guides-de-jeu-combos-et-tactique). |
+| `play_vs_bot.py` | Partie interactive dans le terminal contre B/D/E/F, voir [jouer contre le bot](#jouer-contre-le-bot). |
 | `docs/combo_guide.html`, `docs/tactical_guide.html`, `docs/technique_guide.html` | Guides de jeu pour un humain : combos classés par espérance, enseignements MCTS vs greedy, mécanique de jeu coup par coup. **Générés**, ne pas éditer à la main. |
 | `archive/` | Scripts d'itération et audit remplacés par des versions plus propres, conservés pour l'historique (voir `archive/README.md`). |
 
@@ -318,8 +321,21 @@ joueur humain plutôt que pour lire du code :
   très mince (médiane à 2 cartes, tombe régulièrement à 0), et des arbres
   coûteux (Marronnier, Chêne, Sapin Douglas) qui finissent défaussés plus
   souvent que plantés une fois la diversité d'espèces déjà acquise.
+- **[docs/decisive_guide.html](docs/decisive_guide.html)** — se concentre
+  sur E (greedy + heuristiques + comparateur Gradient Boosting, voir
+  [fonctions de valeur pour MCTS](#fonctions-de-valeur-pour-mcts)) : sur
+  ses meilleures parties (top 10% par score), distingue les choix
+  ÉVIDENTS (delta exact suffit) des choix vraiment DÉCISIFS (le
+  comparateur préfère une carte différente de celle qu'un calcul de gain
+  immédiat aurait jouée). Répond à *qu'est-ce que ce bot voit que le
+  calcul à un coup ne voit pas ?* — avec les corrections les plus
+  fréquentes (souvent : quelle espèce d'arbre planter quand plusieurs
+  rapportent ~0 pt immédiat) et des exemples concrets où le comparateur
+  sacrifie du gain immédiat pour un pari sur la valeur différée (ex.
+  poser un champignon à effet permanent plutôt qu'un arbre qui rapporte
+  plus tout de suite).
 
-Les trois pages s'ouvrent directement dans un navigateur (aucun serveur
+Les quatre pages s'ouvrent directement dans un navigateur (aucun serveur
 requis, aucune dépendance) et se renvoient les unes aux autres par un lien
 en haut de page. GitHub n'affiche pas de rendu pour un fichier `.html`
 (juste le code source), d'où les aperçus ci-dessous : cliquer dessus (ou
@@ -350,6 +366,33 @@ physique par identité Python, pas seulement l'état final) :
 python reference/gen_technique_guide.py               # 30 parties MCTS, 150 it. (~6 min)
 python reference/gen_technique_guide.py 10 100         # échantillon réduit, plus rapide
 ```
+
+Le guide des choix décisifs est généré par `reference/gen_decisive_guide.py`,
+qui fait jouer E contre lui-même et compare, à chaque décision, le coup
+réellement joué à celui qu'un delta exact seul aurait choisi :
+
+```bash
+python reference/gen_decisive_guide.py                 # 500 parties E vs E (~4 min)
+python reference/gen_decisive_guide.py 100 10           # échantillon réduit (100 parties, top 10%)
+python reference/gen_decisive_guide.py --from-cache     # re-génère la page depuis le cache, sans rejouer
+```
+
+## Jouer contre le bot
+
+`play_vs_bot.py` fait jouer une partie interactive dans le terminal contre
+un des bots du dépôt (le paiement et le choix en Clairière restent
+automatiques, comme pour les bots — voir [limitations](#limitations-connues)) :
+
+```bash
+python play_vs_bot.py            # contre E (le plus fort), tu commences
+python play_vs_bot.py B 1        # contre le greedy simple, tu joues en second
+python play_vs_bot.py E 0 12345  # graine fixe, pour rejouer la même partie avec une autre stratégie
+python play_vs_bot.py F          # contre MCTS + tiebreak, le plus lent à jouer
+```
+
+Chaque partie est ajoutée à `human_vs_bot_log.jsonl` (victoires/défaites par
+bot affrontées, affichées en fin de partie) pour suivre ta progression sur
+plusieurs sessions et stratégies.
 
 ## Limitations connues
 
