@@ -192,6 +192,78 @@ sans doute plusieurs milliers d'itérations pour que l'écart moyen
 devienne positif, à un coût par décision hors de propos pour jouer en
 pratique (E répond quasi instantanément).
 
+## Dataset pairwise 100% aléatoire (sans heuristique) : premier résultat non-négatif (19/08)
+
+Hypothèse de Mehdi face au motif "mieux hors ligne = pire en jeu" (6-7
+tentatives, voir plus bas) : et si le vrai problème n'était pas un
+plafond de features, mais le fait que **toutes** les tentatives
+précédentes génèrent leurs données via `S.greedy_action` -- trajectoire
+ET rollout de label -- donc héritent des heuristiques (`choose_draw_source`,
+urgence Clairière) même le bootstrap gen1 (qui changeait la distribution
+via MCTS, mais gardait un rollout de label heuristique) ? Un jeu 100%
+aléatoire est quasi gratuit (~2ms/partie de pur jeu, ~0.26s/partie une
+fois l'extraction de paires ajoutée) : on peut se permettre un dataset
+bien plus gros (3000 parties contre 150-250 jusqu'ici) sans biais
+heuristique d'aucune sorte.
+
+**Génération** (`reference/gen_pairwise_dataset_random.py`) : même
+dispositif anti-bruit que `gen_pairwise_dataset.py` (candidats au même
+nœud, k_rollout=5 à graines communes, split par partie) mais chaque appel
+à `S.greedy_action` remplacé par un choix uniforme parmi les actions
+légales, dans la trajectoire ET dans le rollout de label. 3000 parties ->
+416211 paires (`reference/pairwise_dataset_random.npz`).
+
+**Entraînement** (`train_pairwise_gbm.py` sur ce dataset ->
+`reference/pairwise_gbm_model_random.joblib`) :
+
+| Modèle | Test R² | Test MAE | Signe, \|diff\|<3 (serré) |
+|---|---|---|---|
+| Meilleur précédent (bootstrap gen1, 18/08) | 0.336 | 4.40 | -- |
+| **GBM sur données aléatoires** | **0.395** | **4.10** | **62.1%** (contre 59.2% pour k=1, le précédent record) |
+
+**Meilleures métriques offline jamais mesurées dans ce dépôt, sur toutes
+les tranches (serré 62.1%, [3,8) 71.1%, [8,20) 80.6%, large 89.3%).**
+
+**Gating contre E** (`reference/gate_gbm_random_vs_e.py`, greedy_action
++ ce comparateur vs greedy_action + comparateur GBM live) :
+
+| n | Victoires | Écart moyen (SE) |
+|---|---|---|
+| 30 | 17/30 (57%) | +6.3 (17.0) |
+| 200 | 112/200 (56%) | +10.8 (6.8) |
+| **500** | **252/500 (50.4%)** | **-4.0 (4.6)** |
+
+Le sous-échantillon à n=200 semblait positif (+10.8, ~1.6 écart-type) --
+**régresse vers zéro à n=500** (-4.0, moins de 1 écart-type). Leçon
+méthodologique en soi : ne jamais conclure sur un sous-échantillon, même
+quand la tendance a l'air franche sur 200 parties.
+
+**Verdict final : statistiquement nul, ni victoire ni défaite contre E**
+(-4.0 ± 4.6, à comparer aux -44 à -153 pts de tous les essais précédents,
+et aux 7-9/30 de victoires). **C'est le premier modèle de valeur de toute
+l'investigation (7 tentatives précédentes) qui ne perd pas nettement contre
+E** -- le seul autre résultat de cette qualité dans tout `MODELS.md` est
+"MCTS(150it)+tiebreak vs E : 17/30, +8.5 (22.1), statistiquement nul",
+obtenu par une toute autre méthode (recherche arborescente, pas un
+comparateur seul).
+
+**Interprétation.** Le motif "mieux hors ligne = pire en jeu" ne se
+confirme PAS ici : meilleures métriques offline jamais vues, ET le
+meilleur résultat de gating jamais vu (parité plutôt que défaite nette).
+Ça va dans le sens de l'hypothèse de Mehdi -- le biais heuristique des
+données d'entraînement était probablement une vraie partie du problème,
+pas seulement le plafond de features diagnostiqué le 18/08 (repondération
+des paires serrées, sans effet). Mais "statistiquement nul" reste
+statistiquement nul : ce n'est pas une victoire, donc **pas de promotion
+du modèle vivant** -- règle du dépôt inchangée (jamais sur la seule base
+d'une métrique offline, ni sur un résultat qui ne bat pas clairement
+l'existant). `pairwise_dataset_random.npz` et
+`pairwise_gbm_model_random.joblib` gardés comme trace ; pistes non
+essayées si cette direction est reprise : un dataset encore plus gros
+(le coût par partie est le même, donc 3000->10000+ est direct), ou
+combiner les deux effets positifs connus (données non biaisées + more
+d'itérations MCTS avec ce modèle en tiebreak, jamais testé).
+
 ## Troisième essai : modèle pairwise NON linéaire (réseau siamois, 16/08)
 
 Suite logique du constat ci-dessus : `train_pairwise_mlp.py` reformule
