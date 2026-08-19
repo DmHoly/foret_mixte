@@ -151,6 +151,47 @@ la différence de features ne se décompose pas en fonction de valeur par
 état comme le fait un modèle linéaire, voir la docstring de
 `gen_pairwise_dataset.py`).
 
+## Balayage MCTS pur vs E, iterations x profondeur (19/08)
+
+Question de Mehdi face à l'essai "MCTS pur" ci-dessus (8/30 contre B,
+n'était testé qu'à un seul réglage) : est-ce que suffisamment
+d'itérations finirait par le faire gagner, et lequel des deux leviers
+(itérations ou profondeur de rollout) compte le plus ? Balayage réalisé
+avec `reference/mcts_pure_vs_e_sweep.py` (`leaf_eval=None`, comme
+l'essai du 16/08, mais cette fois contre **E**, le bot le plus fort
+actuel, greedy + tiebreak GBM) -- 12 parties par réglage, sièges
+alternés.
+
+| Itérations | Profondeur rollout | Victoires | Écart moyen (SE) | Tours/partie | Coût |
+|---|---|---|---|---|---|
+| 100 | 40 | 2/12 (17%) | -153.4 (51.7) | 189 | 14.9 s/partie |
+| 100 | 90 | 3/12 (25%) | -72.7 (29.0) | 181 | 25.6 s/partie |
+| 300 | 40 | 7/12 (58%) | -44.6 (41.4) | 189 | 44.0 s/partie |
+| 300 | 90 | 7/12 (58%) | -22.7 (34.2) | 182 | 78.1 s/partie |
+| 600 | 40 | 9/12 (**75%**) | -28.0 (37.8) | 185 | 86.3 s/partie |
+
+**Les deux leviers aident, mais pas au même prix.** Doubler les
+itérations à profondeur fixe (100->300->600 à prof 40) fait progresser
+le taux de victoire de 17% à 75% ; doubler la profondeur à itérations
+fixes aide aussi (100it : 17%->25% ; 300it : 58%->58%, sans gain
+supplémentaire) mais coûte à peu près 2x plus cher par partie sans
+gagner plus que l'ajout d'itérations équivalent -- confirme l'hypothèse
+retenue le 16/08 : chaque itération de rollout profond est bruitée
+(politique gloutonne + 25% de coups aléatoires, `ROLLOUT_EPSILON`), et
+c'est le nombre d'itérations qui moyenne ce bruit, pas la profondeur qui
+en rajoute.
+
+**Signal notable à 600it/prof40 : majorité de victoires (9/12, 75%) mais
+écart moyen encore négatif (-28.0).** Une seule défaite massive (-395)
+suffit à retourner la moyenne malgré 9 victoires sur 12. Signature de la
+variance du jeu plutôt que d'un problème de décision : MCTS pur, à
+budget suffisant, gagne le plus souvent, mais reste vulnérable aux
+tirages extrêmes -- là où E encaisse mieux sans avoir besoin de
+recherche du tout. Extrapolation qualitative (non testée) : il faudrait
+sans doute plusieurs milliers d'itérations pour que l'écart moyen
+devienne positif, à un coût par décision hors de propos pour jouer en
+pratique (E répond quasi instantanément).
+
 ## Troisième essai : modèle pairwise NON linéaire (réseau siamois, 16/08)
 
 Suite logique du constat ci-dessus : `train_pairwise_mlp.py` reformule
