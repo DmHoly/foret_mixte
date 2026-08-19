@@ -86,13 +86,51 @@ def _fallback_action(game):
 
 
 def greedy_action(game, rng, epsilon=0.0, candidates=None, tree_bonus=6,
-                   tree_combo_bonus=None, clearing_urgency=CLEARING_URGENCY_BONUS):
+                   need_scale=3.0, tree_combo_bonus=None,
+                   clearing_urgency=CLEARING_URGENCY_BONUS,
+                   tiebreak=None, tiebreak_margin=3.0):
     """Coup maximisant le gain immédiat, avec un correctif d'ouverture.
 
-    Un arbre ne rapporte presque rien à la pose mais ouvre 4 emplacements.
-    Sans correctif, une politique purement gloutonne ne plante jamais d'arbre
-    et plafonne très bas. `tree_bonus` est une prime décroissante avec le
-    nombre d'arbres déjà en forêt ; c'est une heuristique, pas une règle.
+    En DÉBUT de partie, un arbre rapporte presque rien à la pose (aucun
+    habitant déjà en jeu dont le score dépend du nombre d'arbres/de la
+    diversité d'espèces) mais ouvre 4 emplacements -- sans correctif, une
+    politique purement gloutonne ne plante jamais le premier arbre et
+    plafonne très bas. ATTENTION, ce n'est PAS vrai en général : mesuré
+    (18/08, voir `reference/MODELS.md`, "Correction : le repli forcé
+    n'est pas le moteur") sur des poses d'arbre réelles, `delta_tree`
+    seul vaut en moyenne +7.16 points et est positif dans 99.6% des cas
+    dès qu'un habitant déjà en forêt revalorise chaque arbre planté
+    (majorités, comptages "x arbres", etc.) -- dans 92.9% des poses
+    observées la prime ci-dessous contribue `0` à la décision, sans
+    conséquence, `delta_tree` suffit déjà. Le correctif ne pèse donc
+    réellement que sur l'ouverture, PAS sur toute la partie comme le
+    laisserait penser un simple `tree_bonus / (1 + n_trees)`.
+
+    `tree_bonus` reste le plafond de cette prime, mais elle n'est plus une
+    simple décroissance en 1/(1+n_trees) : elle suit le déficit réel de
+    slots libres (idée de Mehdi, 18/08) -- `slots_libres = 4*n_trees -
+    slots_occupés`, `besoin = habitants en main` (seul proxy légal du
+    "combien je vais poser dans les prochains tours", la main adverse et
+    la pioche future sont cachées), `déficit = max(0, besoin -
+    slots_libres)`. Prime = `tree_bonus * min(1, déficit/need_scale)`,
+    SANS plancher : si les slots libres couvrent déjà la main, planter un
+    arbre ne rapporte plus rien de plus que son `delta_tree` réel (souvent
+    déjà positif tout seul, voir ci-dessus). `need_scale` est le déficit
+    (en habitants) qui donne la prime pleine.
+
+    Gaté contre B (`reference/slot_aware_tree_bonus_experiment.py`,
+    ancienne prime 1/(1+n_trees)) : positif et net, +6.2 pts d'écart moyen
+    sur 2000 parties (SE 2.2, ~2.8 écarts-types). Regaté contre E (même
+    politique + `tiebreak` GBM des deux côtés, le bot le plus fort du dépôt
+    à ce jour) : toujours positif mais plus modeste et à la limite de la
+    significativité, +10.6 pts sur 400 parties (SE 5.4, ~2 écarts-types) --
+    voir `reference/MODELS.md` pour le détail et les réserves. `need_scale`
+    entre 2 et 8 change peu le résultat (la formule sature vite : le
+    déficit observé est presque toujours soit nul soit déjà largement au-
+    dessus de ce seuil). Adopté comme nouveau défaut malgré le signal
+    modeste contre E : jamais négatif sur aucune configuration testée, et
+    la logique (ne pas payer une prime de pose quand les slots suffisent
+    déjà) est plus proche des règles du jeu qu'une décroissance générique.
 
     `tree_combo_bonus` (optionnel, {tree_id: bonus}) : prime supplémentaire
     fixe à la plantation d'une espèce donnée, pour corriger un biais
@@ -113,6 +151,28 @@ def greedy_action(game, rng, epsilon=0.0, candidates=None, tree_bonus=6,
     concurrence avec les poses de la main : sans ça, `best_gain > 0` fait
     toujours préférer poser une carte moyenne de la main plutôt que sécuriser
     une carte forte contestée, qui peut disparaître au tour de l'adversaire.
+
+    `tiebreak` (optionnel, `tiebreak(candidate_states, reference_state,
+    observer) -> list[float]`, un score par candidat, positif si meilleur
+    que la référence) : départage EN UN SEUL APPEL tous les candidats dont
+    le gain exact est à moins de `tiebreak_margin` points du meilleur
+    trouvé, comparés à ce meilleur (comparaison "en étoile", pas un
+    tournoi séquentiel) -- PAS en concurrence avec le delta exact (qui
+    reste le classement principal), seulement un second tour pour les cas
+    où ce delta ne suffit déjà pas à distinguer les candidats de façon
+    fiable. Voir `reference/value_policy.make_pairwise_gbm_tiebreak` et
+    `reference/MODELS.md` ("Un modèle non linéaire discrimine mieux les
+    paires serrées") : un modèle linéaire tourne au niveau du hasard sur
+    cette tranche précise (delta exact < 3 pts) ; un Gradient Boosting
+    entraîné sur les mêmes paires y gagne ~10 points de précision de
+    signe. Le regroupement en un seul appel (plutôt qu'un appel par
+    candidat) est délibéré : le coût mesuré vient d'un overhead fixe par
+    appel sklearn, pas de la complexité de l'algorithme -- comparer 50
+    candidats d'un coup ne coûte quasiment pas plus cher qu'en comparer 1
+    (voir reference/MODELS.md), d'où un facteur ~10-50 de gain à regrouper.
+    Non actif par défaut (opt-in), les décisions réelles et les rollouts
+    existants ne changent pas de comportement tant que ce paramètre n'est
+    pas fourni explicitement.
     """
     actions = game.legal_actions()
     if len(actions) == 1:
@@ -129,12 +189,17 @@ def greedy_action(game, rng, epsilon=0.0, candidates=None, tree_bonus=6,
     player = game.players[game.current]
     forest = player.forest
     base = forest.score()
-    n_trees = forest.n_trees
+
+    free_slots = 4 * forest.n_trees - sum(forest.occupied_positions)
+    hand_dwellers = sum(1 for c in player.hand if c[0] == DWELLER)
+    deficit = max(0, hand_dwellers - free_slots)
+    slot_bonus = tree_bonus * min(1.0, deficit / need_scale)
 
     best, best_gain = None, -1e9
+    gains = {}
     for a in plays:
         if a[0] == "tree":
-            gain = forest.delta_tree(a[1]) + tree_bonus / (1 + n_trees)
+            gain = forest.delta_tree(a[1]) + slot_bonus
             if tree_combo_bonus:
                 gain += tree_combo_bonus.get(a[1], 0.0)
         elif a[0] == "cave_discard":
@@ -147,8 +212,25 @@ def greedy_action(game, rng, epsilon=0.0, candidates=None, tree_bonus=6,
             forest.add_dweller(tree_idx, pos, did)
             gain = forest.score() - base
             forest.undo_dweller(tree_idx, pos, did)
+        gains[a] = gain
         if gain > best_gain:
             best, best_gain = a, gain
+
+    if tiebreak is not None:
+        near = [a for a in plays if a != best and gains[a] >= best_gain - tiebreak_margin]
+        if near:
+            observer = game.current
+            best_state = game.clone()
+            best_state.apply(best)
+            near_states = []
+            for a in near:
+                state = game.clone()
+                state.apply(a)
+                near_states.append(state)
+            scores = tiebreak(near_states, best_state, observer)
+            top = max(range(len(scores)), key=lambda i: scores[i])
+            if scores[top] > 0:
+                best = near[top]
 
     if (clearing_urgency and ("draw",) in actions
             and clearing_urgency > best_gain
@@ -346,10 +428,26 @@ class MCTS:
     joueur), appelée sur l'état atteint après sélection/expansion, sans
     dérouler la partie plus loin. Par défaut (`leaf_eval=None`), le
     comportement est inchangé (rollout aléatoire biaisé).
+
+    `tiebreak` (optionnel, même signature que `greedy_action` :
+    `tiebreak(candidate_states, reference_state, observer) -> list[float]`) :
+    départage, UNE SEULE FOIS à la fin de `choose()` (pas à l'intérieur
+    des simulations), les enfants de la racine dont le nombre de visites
+    est à moins de `tiebreak_margin` (fraction du max, défaut 20%) du
+    meilleur trouvé. Volontairement PAS branché dans `rollout()` : sur un
+    échantillon réel, ~82% des tours à plusieurs candidats déclenchent un
+    "presque à égalité" côté `greedy_action` -- brancher le modèle
+    Gradient Boosting À CHAQUE étape simulée multiplierait le temps par
+    décision par un facteur de plusieurs dizaines (des centaines
+    d'itérations, chacune avec plusieurs coups de rollout). Un appel
+    unique par décision réelle, lui, coûte ~2-3 ms de plus sur un budget
+    de dizaines à centaines de ms -- négligeable. Voir reference/MODELS.md,
+    "Comparateur pairwise dans greedy_action".
     """
 
     def __init__(self, observer, iterations=200, seed=None, c=C_PUCT,
-                 rollout_depth=30, leaf_eval=None, risk_k=0.0):
+                 rollout_depth=30, leaf_eval=None, risk_k=0.0,
+                 tiebreak=None, tiebreak_margin=0.2):
         self.observer = observer
         self.iterations = iterations
         self.rollout_depth = rollout_depth
@@ -358,6 +456,8 @@ class MCTS:
         self.root = Node(None, None, None)
         self.leaf_eval = leaf_eval
         self.risk_k = risk_k
+        self.tiebreak = tiebreak
+        self.tiebreak_margin = tiebreak_margin
 
     def advance(self, action):
         """Réutilise le sous-arbre correspondant au coup effectivement joué."""
@@ -408,7 +508,27 @@ class MCTS:
                       if a in legal]
         if not candidates:
             return _fallback_action(game)
-        return max(candidates)[1]
+
+        best_visits, best_action = max(candidates)
+
+        if self.tiebreak is not None and best_visits > 0:
+            threshold = best_visits * (1.0 - self.tiebreak_margin)
+            near = [a for v, a in candidates if a != best_action and v >= threshold]
+            if near:
+                observer = game.current
+                best_state = game.clone()
+                best_state.apply(best_action)
+                near_states = []
+                for a in near:
+                    state = game.clone()
+                    state.apply(a)
+                    near_states.append(state)
+                scores = self.tiebreak(near_states, best_state, observer)
+                top = max(range(len(scores)), key=lambda i: scores[i])
+                if scores[top] > 0:
+                    best_action = near[top]
+
+        return best_action
 
 
 def play_game(policies, n_players=2, seed=None, max_turns=1000):
