@@ -14,6 +14,7 @@ un budget court) mais on tronque a `cap` coups/joueur et on regarde :
 
 Usage : python reference/short_game_breakdown_e.py [n_games] [cap_par_joueur]
 """
+import pickle
 import statistics
 import sys
 import time
@@ -116,3 +117,8 @@ if __name__ == "__main__":
     print(f"{'source':28s} {'top20%':>8s} {'bottom20%':>10s} {'ecart':>8s}")
     for src, t, b, d in diffs[:15]:
         print(f"{src:28s} {t:8.2f} {b:10.2f} {d:+8.2f}")
+
+    out = Path(__file__).resolve().parent / "short_game_e_rows.pkl"
+    with open(out, "wb") as f:
+        pickle.dump(rows, f)
+    print(f"\nrows sauvegardees dans {out} ({len(rows)} forets) pour analyse ulterieure")
